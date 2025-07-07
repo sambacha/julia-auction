@@ -1,0 +1,24 @@
+name = "AuctionSimulator"
+uuid = "12345678-1234-5678-9012-123456789012"
+authors = ["Julia Auction Team <auction@example.com>"]
+version = "0.1.0"
+description = "A comprehensive auction simulation library for Julia"
+license = "MIT"
+keywords = ["auction", "simulation", "economics", "bidding"]
+categories = ["Economics", "Simulation"]
+
+[compat]
+julia = "1.6"
+
+[deps]
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+
+[targets]
+test = ["Test", "BenchmarkTools"]

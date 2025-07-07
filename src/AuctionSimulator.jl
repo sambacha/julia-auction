@@ -1,0 +1,424 @@
+"""
+    AuctionSimulator
+
+A comprehensive auction simulation library for Julia providing various auction mechanisms,
+bidding strategies, and analysis tools.
+
+# Features
+- Multiple auction types (English, Dutch, First-Price Sealed-Bid, etc.)
+- Flexible bidding strategies
+- Comprehensive result analysis
+- Performance benchmarking tools
+- Extensible architecture for custom auction types
+
+# Usage
+```julia
+using AuctionSimulator
+
+# Create bidders with different strategies
+bidder1 = Bidder(1, 100.0, TruthfulStrategy())
+bidder2 = Bidder(2, 150.0, ShadeStrategy(0.1))
+
+# Run an auction
+auction = EnglishAuction(10.0, 5.0)  # reserve price, increment
+result = run_auction(auction, [bidder1, bidder2])
+```
+"""
+module AuctionSimulator
+
+using Random
+using Statistics
+
+# Export abstract types
+export AbstractBidder, AbstractAuction, AbstractBiddingStrategy
+
+# Export concrete types
+export Bidder, Bid, AuctionResult
+
+# Export functions (to be implemented by other agents)
+export run_auction, analyze_results, benchmark_auction
+
+# Export auction functions
+export conduct_auction, determine_winner, calculate_payment, validate_bids, generate_bid
+
+# Export utility functions
+export get_id, get_valuation, get_strategy, get_bidder_id, get_value, get_timestamp
+export has_winner, get_winner_id, get_winning_price, get_all_bids, get_statistics
+export sort_bids, highest_bid, second_highest_bid
+
+# Export auction types
+export FirstPriceAuction, SecondPriceAuction
+
+# Export bidding strategies
+export TruthfulBidder, ShadedBidder, RandomBidder, StrategicBidder
+
+# Export simulation types and functions
+export AuctionConfig, SimulationResult, BenchmarkResult
+export run_simulation, benchmark_auction, calculate_efficiency
+
+#=============================================================================
+    Abstract Types
+=============================================================================#
+
+"""
+    AbstractBidder
+
+Abstract type for all bidder implementations.
+
+All concrete bidder types must implement:
+- `get_id(bidder)` - Returns the bidder's unique identifier
+- `get_valuation(bidder)` - Returns the bidder's private valuation
+- `get_strategy(bidder)` - Returns the bidder's bidding strategy
+"""
+abstract type AbstractBidder end
+
+"""
+    AbstractAuction
+
+Abstract type for all auction mechanism implementations.
+
+All concrete auction types must implement:
+- `run_auction(auction, bidders)` - Executes the auction mechanism
+- `get_reserve_price(auction)` - Returns the auction's reserve price
+- `is_valid_bid(auction, bid)` - Validates a bid according to auction rules
+"""
+abstract type AbstractAuction end
+
+"""
+    AbstractBiddingStrategy
+
+Abstract type for all bidding strategy implementations.
+
+All concrete strategy types must implement:
+- `make_bid(strategy, bidder, auction_state)` - Determines the bid amount
+- `update_strategy(strategy, auction_state)` - Updates strategy based on auction progress
+"""
+abstract type AbstractBiddingStrategy end
+
+#=============================================================================
+    Concrete Types
+=============================================================================#
+
+"""
+    Bidder{S <: AbstractBiddingStrategy}
+
+Represents a bidder in an auction with a unique ID, private valuation, and bidding strategy.
+
+# Fields
+- `id::Int`: Unique identifier for the bidder
+- `valuation::Float64`: Private valuation for the auction item (must be positive)
+- `strategy::S`: Bidding strategy implementation
+
+# Constructors
+```julia
+Bidder(id, valuation, strategy)
+```
+
+# Examples
+```julia
+bidder = Bidder(1, 100.0, TruthfulStrategy())
+```
+"""
+struct Bidder{S <: AbstractBiddingStrategy} <: AbstractBidder
+    id::Int
+    valuation::Float64
+    strategy::S
+    
+    function Bidder(id::Int, valuation::Float64, strategy::S) where {S <: AbstractBiddingStrategy}
+        if id <= 0
+            throw(ArgumentError("Bidder ID must be positive"))
+        end
+        if valuation <= 0
+            throw(ArgumentError("Valuation must be positive"))
+        end
+        new{S}(id, valuation, strategy)
+    end
+end
+
+"""
+    Bid
+
+Represents a bid made by a bidder in an auction.
+
+# Fields
+- `bidder_id::Int`: ID of the bidder who made the bid
+- `value::Float64`: The bid amount (must be non-negative)
+- `timestamp::Float64`: When the bid was made (in seconds since auction start)
+
+# Constructors
+```julia
+Bid(bidder_id, value, timestamp)
+Bid(bidder_id, value)  # timestamp defaults to current time
+```
+
+# Examples
+```julia
+bid = Bid(1, 50.0, 1.5)  # Bidder 1 bids 50.0 at time 1.5
+```
+"""
+struct Bid
+    bidder_id::Int
+    value::Float64
+    timestamp::Float64
+    
+    function Bid(bidder_id::Int, value::Float64, timestamp::Float64)
+        if bidder_id <= 0
+            throw(ArgumentError("Bidder ID must be positive"))
+        end
+        if value < 0
+            throw(ArgumentError("Bid value must be non-negative"))
+        end
+        if timestamp < 0
+            throw(ArgumentError("Timestamp must be non-negative"))
+        end
+        new(bidder_id, value, timestamp)
+    end
+end
+
+# Convenience constructor with current time
+Bid(bidder_id::Int, value::Float64) = Bid(bidder_id, value, 0.0)
+
+"""
+    AuctionResult{T <: AbstractAuction}
+
+Contains the complete results of an auction including winner, final price, and statistics.
+
+# Fields
+- `auction_type::T`: The auction mechanism that was used
+- `winner_id::Union{Int, Nothing}`: ID of the winning bidder (Nothing if no winner)
+- `winning_price::Float64`: Final price paid by the winner
+- `all_bids::Vector{Bid}`: Complete history of all bids made
+- `statistics::Dict{String, Any}`: Additional statistics and metadata
+
+# Examples
+```julia
+result = AuctionResult(
+    auction,
+    1,                    # winner_id
+    95.0,                 # winning_price
+    [bid1, bid2, bid3],   # all_bids
+    Dict("revenue" => 95.0, "efficiency" => 0.95)  # statistics
+)
+```
+"""
+struct AuctionResult{T <: AbstractAuction}
+    auction_type::T
+    winner_id::Union{Int, Nothing}
+    winning_price::Float64
+    all_bids::Vector{Bid}
+    statistics::Dict{String, Any}
+    
+    function AuctionResult(auction_type::T, winner_id::Union{Int, Nothing}, 
+                          winning_price::Float64, all_bids::Vector{Bid}, 
+                          statistics::Dict{String, Any}) where {T <: AbstractAuction}
+        if winning_price < 0
+            throw(ArgumentError("Winning price must be non-negative"))
+        end
+        if winner_id !== nothing && winner_id <= 0
+            throw(ArgumentError("Winner ID must be positive if not nothing"))
+        end
+        new{T}(auction_type, winner_id, winning_price, all_bids, statistics)
+    end
+end
+
+#=============================================================================
+    Accessor Functions
+=============================================================================#
+
+"""
+    get_id(bidder::AbstractBidder)
+
+Returns the unique identifier of the bidder.
+"""
+get_id(bidder::Bidder) = bidder.id
+
+"""
+    get_valuation(bidder::AbstractBidder)
+
+Returns the private valuation of the bidder.
+"""
+get_valuation(bidder::Bidder) = bidder.valuation
+
+"""
+    get_strategy(bidder::AbstractBidder)
+
+Returns the bidding strategy of the bidder.
+"""
+get_strategy(bidder::Bidder) = bidder.strategy
+
+"""
+    get_bidder_id(bid::Bid)
+
+Returns the ID of the bidder who made the bid.
+"""
+get_bidder_id(bid::Bid) = bid.bidder_id
+
+"""
+    get_value(bid::Bid)
+
+Returns the value of the bid.
+"""
+get_value(bid::Bid) = bid.value
+
+"""
+    get_timestamp(bid::Bid)
+
+Returns the timestamp when the bid was made.
+"""
+get_timestamp(bid::Bid) = bid.timestamp
+
+"""
+    has_winner(result::AuctionResult)
+
+Returns true if the auction had a winner, false otherwise.
+"""
+has_winner(result::AuctionResult) = result.winner_id !== nothing
+
+"""
+    get_winner_id(result::AuctionResult)
+
+Returns the ID of the winning bidder, or nothing if no winner.
+"""
+get_winner_id(result::AuctionResult) = result.winner_id
+
+"""
+    get_winning_price(result::AuctionResult)
+
+Returns the final price paid by the winner.
+"""
+get_winning_price(result::AuctionResult) = result.winning_price
+
+"""
+    get_all_bids(result::AuctionResult)
+
+Returns the complete history of bids made in the auction.
+"""
+get_all_bids(result::AuctionResult) = result.all_bids
+
+"""
+    get_statistics(result::AuctionResult)
+
+Returns the statistics dictionary containing auction metadata.
+"""
+get_statistics(result::AuctionResult) = result.statistics
+
+#=============================================================================
+    Utility Functions
+=============================================================================#
+
+"""
+    Base.show(io::IO, bidder::Bidder)
+
+Custom display format for Bidder objects.
+"""
+function Base.show(io::IO, bidder::Bidder)
+    print(io, "Bidder(id=$(bidder.id), valuation=$(bidder.valuation), strategy=$(typeof(bidder.strategy)))")
+end
+
+"""
+    Base.show(io::IO, bid::Bid)
+
+Custom display format for Bid objects.
+"""
+function Base.show(io::IO, bid::Bid)
+    print(io, "Bid(bidder_id=$(bid.bidder_id), value=$(bid.value), timestamp=$(bid.timestamp))")
+end
+
+"""
+    Base.show(io::IO, result::AuctionResult)
+
+Custom display format for AuctionResult objects.
+"""
+function Base.show(io::IO, result::AuctionResult)
+    winner_str = result.winner_id === nothing ? "None" : string(result.winner_id)
+    print(io, "AuctionResult(winner_id=$(winner_str), winning_price=$(result.winning_price), num_bids=$(length(result.all_bids)))")
+end
+
+"""
+    Base.isless(bid1::Bid, bid2::Bid)
+
+Comparison function for Bid objects. Bids are ordered first by value (ascending),
+then by timestamp (ascending) for tie-breaking.
+"""
+function Base.isless(bid1::Bid, bid2::Bid)
+    if bid1.value != bid2.value
+        return bid1.value < bid2.value
+    end
+    return bid1.timestamp < bid2.timestamp
+end
+
+"""
+    sort_bids(bids::Vector{Bid}; by_value=true, reverse=false)
+
+Sort bids by value (default) or timestamp.
+
+# Arguments
+- `bids`: Vector of Bid objects to sort
+- `by_value`: If true, sort by bid value; if false, sort by timestamp
+- `reverse`: If true, sort in descending order
+
+# Returns
+- Sorted vector of Bid objects
+"""
+function sort_bids(bids::Vector{Bid}; by_value::Bool=true, reverse::Bool=false)
+    if by_value
+        return sort(bids, by=get_value, rev=reverse)
+    else
+        return sort(bids, by=get_timestamp, rev=reverse)
+    end
+end
+
+"""
+    highest_bid(bids::Vector{Bid})
+
+Returns the bid with the highest value. If there are ties, returns the earliest bid.
+
+# Arguments
+- `bids`: Vector of Bid objects
+
+# Returns
+- The Bid object with the highest value, or nothing if the vector is empty
+"""
+function highest_bid(bids::Vector{Bid})
+    if isempty(bids)
+        return nothing
+    end
+    # Find the bid with the highest value, using timestamp as tiebreaker (earliest wins)
+    best_bid = bids[1]
+    for bid in bids
+        if bid.value > best_bid.value || 
+           (bid.value == best_bid.value && bid.timestamp < best_bid.timestamp)
+            best_bid = bid
+        end
+    end
+    return best_bid
+end
+
+"""
+    second_highest_bid(bids::Vector{Bid})
+
+Returns the bid with the second-highest value.
+
+# Arguments
+- `bids`: Vector of Bid objects
+
+# Returns
+- The Bid object with the second-highest value, or nothing if fewer than 2 bids
+"""
+function second_highest_bid(bids::Vector{Bid})
+    if length(bids) < 2
+        return nothing
+    end
+    sorted_bids = sort_bids(bids, reverse=true)
+    return sorted_bids[2]
+end
+
+#=============================================================================
+    Module Includes (for future implementation by other agents)
+=============================================================================#
+
+# Include other modules
+include("auctions.jl")          # Auction mechanisms and bidding strategies
+include("simulation.jl")        # Simulation engine and benchmarking
+
+end # module AuctionSimulator
