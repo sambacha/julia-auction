@@ -1,6 +1,13 @@
 # Message types for actor communication
 # Following A/HC/LC naming pattern
 
+# Import MetadataValue and MetadataDict from abstract.jl
+using ..Actors: MetadataValue, MetadataDict
+
+# Define response types for channels
+const ResponseValue = Union{Bool, Int64, Float64, String, AuctionResult, Vector{Bid}, MetadataDict, Nothing}
+const ResponseChannel = Channel{ResponseValue}
+
 """
     BidMessage
 
@@ -11,7 +18,7 @@ struct BidMessage <: ActorMessage
     auction_id::UUID
     amount::Float64
     quantity::Int
-    metadata::Dict{Symbol, Any}
+    metadata::MetadataDict
     timestamp::DateTime
 end
 
@@ -32,8 +39,8 @@ Message to query auction state.
 """
 struct QueryMessage <: ActorMessage
     query_type::Symbol
-    parameters::Dict{Symbol, Any}
-    response_channel::Channel{Any}
+    parameters::MetadataDict
+    response_channel::ResponseChannel
 end
 
 """
@@ -42,7 +49,7 @@ end
 Message to update auction configuration.
 """
 struct UpdateConfigMessage <: ActorMessage
-    updates::Dict{Symbol, Any}
+    updates::MetadataDict
     timestamp::DateTime
 end
 
@@ -54,7 +61,7 @@ Message to request a state snapshot.
 struct StateSnapshotMessage <: ActorMessage
     include_bids::Bool
     include_metadata::Bool
-    response_channel::Channel{Any}
+    response_channel::ResponseChannel
 end
 
 """

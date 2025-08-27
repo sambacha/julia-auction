@@ -3,23 +3,31 @@ module LatencyMonitor
 using Base.Threads: Atomic, SpinLock
 using Statistics
 using Dates
+using TimerOutputs
+using Logging
 
-export LatencyTracker, CircuitBreaker, AdaptiveBypass, LatencyMetrics
+export LatencyTracker, CircuitBreaker, AdaptiveBypass, LatencyMetrics, latency_tracker
 export record_latency!, check_circuit_breaker, should_bypass
 export get_latency_stats, reset_metrics, configure_thresholds
+export ProductionLatencyTracker, PerformanceReport, SlowOperationAlert
+export create_production_tracker, generate_performance_report, check_slow_operations
+export @timed_operation, measure_with_timer
 
-# Latency metrics with microsecond precision
+# Enhanced latency metrics with microsecond precision
 mutable struct LatencyMetrics
     min::Float64  # microseconds
     max::Float64
     mean::Float64
     median::Float64
+    p50::Float64
     p95::Float64
     p99::Float64
+    p999::Float64  # p99.9
     std_dev::Float64
     count::Int
     sum::Float64
     sum_squared::Float64
+    percentiles::Vector{Float64}  # Raw data for accurate percentile calculation
 end
 
 # Circuit breaker for high latency protection
@@ -48,42 +56,100 @@ mutable struct AdaptiveBypass
     bypass_rate::Atomic{Float64}
 end
 
-# Main latency tracker
-mutable struct LatencyTracker
+# Production-grade latency tracker with TimerOutputs integration
+mutable struct ProductionLatencyTracker
     components::Dict{Symbol,Vector{Float64}}  # Component-wise latencies
     metrics::Dict{Symbol,LatencyMetrics}
     circuit_breakers::Dict{Symbol,CircuitBreaker}
     bypass_logic::Dict{Symbol,AdaptiveBypass}
     global_metrics::LatencyMetrics
+    timer_output::TimerOutput
+    slow_operation_threshold_ms::Float64
+    slow_operations::Vector{Tuple{Symbol, Float64, Float64}}  # (operation, latency_ms, timestamp)
+    performance_targets::Dict{Symbol, Float64}  # p99 targets per operation
+    alerts::Vector{SlowOperationAlert}
     lock::SpinLock
     max_samples::Int
     sample_window_ms::Float64
     last_cleanup::Float64
+    last_report_time::Float64
+end
+
+# Legacy type alias for backward compatibility
+const LatencyTracker = ProductionLatencyTracker
+
+# Slow operation alert
+struct SlowOperationAlert
+    operation::Symbol
+    latency_ms::Float64
+    threshold_ms::Float64
+    timestamp::Float64
+    p99_target_ms::Float64
+end
+
+# Performance report structure
+struct PerformanceReport
+    timestamp::Float64
+    window_ms::Float64
+    total_operations::Int
+    operations_by_component::Dict{Symbol, Int}
+    latency_by_component::Dict{Symbol, NamedTuple}
+    slow_operations::Vector{SlowOperationAlert}
+    sla_violations::Dict{Symbol, Float64}  # percentage of operations exceeding target
+    timer_report::String
 end
 
 """
-    LatencyTracker(; kwargs...)
+    latency_tracker(; kwargs...)
 
 Create a latency tracker with microsecond precision and circuit breakers.
 """
-function LatencyTracker(;
+function latency_tracker(;
     max_samples::Int=10000,
     sample_window_ms::Float64=60000.0,  # 1 minute window
     default_threshold_ms::Float64=100.0,
     default_bypass_threshold_ms::Float64=50.0)
     
-    return LatencyTracker(
+    return create_production_tracker(
+        max_samples=max_samples,
+        sample_window_ms=sample_window_ms,
+        slow_operation_threshold_ms=default_threshold_ms
+    )
+end
+
+"""    create_production_tracker(; kwargs...)
+
+Create a production-ready latency tracker with comprehensive monitoring.
+"""
+function create_production_tracker(;
+    max_samples::Int=10000,
+    sample_window_ms::Float64=60000.0,  # 1 minute window
+    slow_operation_threshold_ms::Float64=100.0,
+    p99_target_ms::Float64=10.0)  # <10ms p99 target
+    
+    current_time = time() * 1000
+    
+    return ProductionLatencyTracker(
         Dict{Symbol,Vector{Float64}}(),
         Dict{Symbol,LatencyMetrics}(),
         Dict{Symbol,CircuitBreaker}(),
         Dict{Symbol,AdaptiveBypass}(),
         create_empty_metrics(),
+        TimerOutput(),
+        slow_operation_threshold_ms,
+        Tuple{Symbol, Float64, Float64}[],
+        Dict{Symbol, Float64}(),
+        SlowOperationAlert[],
         SpinLock(),
         max_samples,
         sample_window_ms,
-        time() * 1000
+        current_time,
+        current_time
     )
 end
+
+# Compatibility alias - use latency_tracker() instead
+LatencyTracker(args...; kwargs...) = create_production_tracker(args...; kwargs...)
 
 """
     record_latency!(tracker, component, latency_us; kwargs...)
@@ -116,9 +182,22 @@ function record_latency!(tracker::LatencyTracker,
         update_metrics!(tracker.metrics[component], latency_us)
         update_metrics!(tracker.global_metrics, latency_us)
         
+        # Check for slow operations
+        latency_ms = latency_us / 1000.0
+        if latency_ms > tracker.slow_operation_threshold_ms
+            push!(tracker.slow_operations, (component, latency_ms, current_time_ms))
+            
+            # Create alert if performance target is set
+            if haskey(tracker.performance_targets, component)
+                target = tracker.performance_targets[component]
+                alert = SlowOperationAlert(component, latency_ms, tracker.slow_operation_threshold_ms, current_time_ms, target)
+                push!(tracker.alerts, alert)
+                @warn "Slow operation detected" operation=component latency_ms=latency_ms threshold_ms=tracker.slow_operation_threshold_ms
+            end
+        end
+        
         # Check circuit breaker
         if check_circuit && haskey(tracker.circuit_breakers, component)
-            latency_ms = latency_us / 1000.0
             update_circuit_breaker!(tracker.circuit_breakers[component], latency_ms)
             update_bypass_logic!(tracker.bypass_logic[component], latency_ms)
         end
@@ -319,12 +398,15 @@ function create_empty_metrics()
         0.0,   # max
         0.0,   # mean
         0.0,   # median
+        0.0,   # p50
         0.0,   # p95
         0.0,   # p99
+        0.0,   # p999
         0.0,   # std_dev
         0,     # count
         0.0,   # sum
-        0.0    # sum_squared
+        0.0,   # sum_squared
+        Float64[]  # percentiles
     )
 end
 
@@ -374,9 +456,33 @@ function update_metrics!(metrics::LatencyMetrics, value::Float64)
     metrics.max = max(metrics.max, value)
     metrics.mean = metrics.sum / metrics.count
     
+    # Add to percentiles array (limited to prevent memory issues)
+    push!(metrics.percentiles, value)
+    if length(metrics.percentiles) > 10000
+        # Keep only recent samples, sorted for efficient percentile calculation
+        metrics.percentiles = sort(metrics.percentiles[end-5000:end])
+    end
+    
     if metrics.count > 1
         variance = (metrics.sum_squared - metrics.sum^2 / metrics.count) / (metrics.count - 1)
         metrics.std_dev = sqrt(max(0, variance))
+        
+        # Update percentiles if we have enough samples
+        if length(metrics.percentiles) >= 10
+            sorted_percentiles = sort(metrics.percentiles)
+            n = length(sorted_percentiles)
+            
+            p50_idx = max(1, round(Int, 0.50 * n))
+            p95_idx = max(1, round(Int, 0.95 * n))
+            p99_idx = max(1, round(Int, 0.99 * n))
+            p999_idx = max(1, round(Int, 0.999 * n))
+            
+            metrics.median = sorted_percentiles[p50_idx]
+            metrics.p50 = sorted_percentiles[p50_idx]
+            metrics.p95 = sorted_percentiles[p95_idx]
+            metrics.p99 = sorted_percentiles[p99_idx]
+            metrics.p999 = sorted_percentiles[p999_idx]
+        end
     end
 end
 
@@ -465,6 +571,190 @@ function cleanup_old_samples!(tracker::LatencyTracker)
                 tracker.metrics[component] = metrics
             end
         end
+    end
+    
+    # Clean up production-specific data
+    current_time = time() * 1000
+    
+    # Clean up old slow operations (keep last 24 hours)
+    cutoff_time = current_time - 24 * 3600 * 1000.0  # 24 hours
+    filter!(op -> op[3] >= cutoff_time, tracker.slow_operations)
+    
+    # Clean up old alerts (keep last 24 hours)
+    filter!(alert -> alert.timestamp >= cutoff_time, tracker.alerts)
+end
+
+# Production monitoring functions
+
+"""    @timed_operation(tracker, operation_name, expression)
+
+Macro for timing operations with automatic latency recording.
+"""
+macro timed_operation(tracker, operation_name, expression)
+    return quote
+        local start_time = time()
+        local result = nothing
+        @timeit $(esc(tracker)).timer_output $(string(operation_name)) begin
+            result = $(esc(expression))
+        end
+        local end_time = time()
+        local latency_us = (end_time - start_time) * 1_000_000
+        record_latency!($(esc(tracker)), $(esc(operation_name)), latency_us)
+        result
+    end
+end
+
+"""    measure_with_timer(f, tracker, operation_name)
+
+Execute function with comprehensive timing and monitoring.
+"""
+function measure_with_timer(f::Function, tracker::ProductionLatencyTracker, operation_name::Symbol)
+    start_time = time()
+    result = nothing
+    
+    @timeit tracker.timer_output string(operation_name) begin
+        result = f()
+    end
+    
+    end_time = time()
+    latency_us = (end_time - start_time) * 1_000_000
+    record_latency!(tracker, operation_name, latency_us)
+    
+    return result
+end
+
+"""    generate_performance_report(tracker)
+
+Generate comprehensive performance report with SLA analysis.
+"""
+function generate_performance_report(tracker::ProductionLatencyTracker)
+    current_time = time() * 1000
+    window_start = current_time - tracker.sample_window_ms
+    
+    lock(tracker.lock) do
+        # Calculate operations in current window
+        total_operations = 0
+        operations_by_component = Dict{Symbol, Int}()
+        latency_by_component = Dict{Symbol, NamedTuple}()
+        sla_violations = Dict{Symbol, Float64}()
+        
+        for (component, samples) in tracker.components
+            count = length(samples)
+            operations_by_component[component] = count
+            total_operations += count
+            
+            if count > 0
+                stats = get_latency_stats(tracker, component)
+                latency_by_component[component] = stats
+                
+                # Check SLA violations if target is set
+                if haskey(tracker.performance_targets, component) && stats !== nothing
+                    target_ms = tracker.performance_targets[component]
+                    violations = count(s -> (s / 1000.0) > target_ms, samples)
+                    sla_violations[component] = (violations / count) * 100.0
+                end
+            end
+        end
+        
+        # Get recent slow operations
+        recent_slow = filter(op -> op[3] >= window_start, tracker.slow_operations)
+        slow_alerts = [SlowOperationAlert(op[1], op[2], tracker.slow_operation_threshold_ms, op[3], 
+                                         get(tracker.performance_targets, op[1], 0.0)) 
+                      for op in recent_slow]
+        
+        # Generate timer report
+        timer_report = string(tracker.timer_output)
+        
+        tracker.last_report_time = current_time
+        
+        return PerformanceReport(
+            current_time,
+            tracker.sample_window_ms,
+            total_operations,
+            operations_by_component,
+            latency_by_component,
+            slow_alerts,
+            sla_violations,
+            timer_report
+        )
+    end
+end
+
+"""    check_slow_operations(tracker; threshold_percentile=0.99)
+
+Check for operations exceeding performance thresholds.
+"""
+function check_slow_operations(tracker::ProductionLatencyTracker; threshold_percentile::Float64=0.99)
+    current_time = time() * 1000
+    alerts = SlowOperationAlert[]
+    
+    lock(tracker.lock) do
+        for (component, metrics) in tracker.metrics
+            if metrics.count > 10  # Need sufficient samples
+                percentile_value = if threshold_percentile == 0.95
+                    metrics.p95
+                elseif threshold_percentile == 0.99
+                    metrics.p99
+                elseif threshold_percentile == 0.999
+                    metrics.p999
+                else
+                    metrics.p99  # Default to p99
+                end
+                
+                percentile_ms = percentile_value / 1000.0
+                target_ms = get(tracker.performance_targets, component, 10.0)  # Default 10ms target
+                
+                if percentile_ms > target_ms
+                    alert = SlowOperationAlert(
+                        component,
+                        percentile_ms,
+                        target_ms,
+                        current_time,
+                        target_ms
+                    )
+                    push!(alerts, alert)
+                    
+                    @warn "Performance SLA violation detected" 
+                        operation=component
+                        percentile=threshold_percentile
+                        actual_ms=percentile_ms
+                        target_ms=target_ms
+                        violation_ratio=percentile_ms/target_ms
+                end
+            end
+        end
+    end
+    
+    return alerts
+end
+
+"""    set_performance_target(tracker, operation, target_ms)
+
+Set p99 performance target for an operation.
+"""
+function set_performance_target(tracker::ProductionLatencyTracker, operation::Symbol, target_ms::Float64)
+    lock(tracker.lock) do
+        tracker.performance_targets[operation] = target_ms
+        @info "Performance target set" operation=operation target_ms=target_ms
+    end
+end
+
+"""    get_timer_report(tracker)
+
+Get TimerOutputs report as string.
+"""
+function get_timer_report(tracker::ProductionLatencyTracker)
+    return string(tracker.timer_output)
+end
+
+"""    reset_timer(tracker)
+
+Reset the TimerOutput for fresh measurements.
+"""
+function reset_timer(tracker::ProductionLatencyTracker)
+    lock(tracker.lock) do
+        reset_timer!(tracker.timer_output)
+        @info "Timer reset for fresh measurements"
     end
 end
 

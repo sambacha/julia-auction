@@ -8,6 +8,15 @@ including performance profiling, scalability analysis, and efficiency metrics.
 using Random
 using Statistics
 using BenchmarkTools
+using Dates
+
+# Import configuration manager
+include("config/ConfigManager.jl")
+using .ConfigManager: load_config, get_config, AuctionConfig as GlobalAuctionConfig
+
+# Define PerformanceValue union type for simulation metrics
+const PerformanceValue = Union{Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64}, DateTime, Nothing}
+const PerformanceDict = Dict{String, PerformanceValue}
 
 # Configuration Management
 """
@@ -34,21 +43,29 @@ struct AuctionConfig
     parallel::Bool
     
     function AuctionConfig(;
-        num_rounds::Int = 1000,
-        num_items::Int = 1,
-        min_value::Float64 = 1.0,
-        max_value::Float64 = 100.0,
-        reserve_price::Float64 = 0.0,
+        num_rounds::Union{Int, Nothing} = nothing,
+        num_items::Union{Int, Nothing} = nothing,
+        min_value::Union{Float64, Nothing} = nothing,
+        max_value::Union{Float64, Nothing} = nothing,
+        reserve_price::Union{Float64, Nothing} = nothing,
         seed::Union{Int, Nothing} = nothing,
-        parallel::Bool = false
+        parallel::Bool = false,
+        global_config::GlobalAuctionConfig = load_config()
     )
-        @assert num_rounds > 0 "Number of rounds must be positive"
-        @assert num_items > 0 "Number of items must be positive"
-        @assert min_value >= 0 "Minimum value must be non-negative"
-        @assert max_value > min_value "Maximum value must be greater than minimum value"
-        @assert reserve_price >= 0 "Reserve price must be non-negative"
+        # Use provided values or load from global config
+        final_num_rounds = num_rounds !== nothing ? num_rounds : get_config(global_config, "simulation.default_num_rounds", Int)
+        final_num_items = num_items !== nothing ? num_items : get_config(global_config, "simulation.default_num_items", Int)
+        final_min_value = min_value !== nothing ? min_value : get_config(global_config, "simulation.min_valuation", Float64)
+        final_max_value = max_value !== nothing ? max_value : get_config(global_config, "simulation.max_valuation", Float64)
+        final_reserve_price = reserve_price !== nothing ? reserve_price : get_config(global_config, "simulation.default_reserve_price", Float64)
         
-        new(num_rounds, num_items, min_value, max_value, reserve_price, seed, parallel)
+        @assert final_num_rounds > 0 "Number of rounds must be positive"
+        @assert final_num_items > 0 "Number of items must be positive"
+        @assert final_min_value >= 0 "Minimum value must be non-negative"
+        @assert final_max_value > final_min_value "Maximum value must be greater than minimum value"
+        @assert final_reserve_price >= 0 "Reserve price must be non-negative"
+        
+        new(final_num_rounds, final_num_items, final_min_value, final_max_value, final_reserve_price, seed, parallel)
     end
 end
 
@@ -65,14 +82,23 @@ default_config() = AuctionConfig()
 
 Returns a minimal AuctionConfig for quick testing.
 """
-quick_test_config() = AuctionConfig(num_rounds=10, num_items=1)
+quick_test_config(global_config::GlobalAuctionConfig = load_config()) = AuctionConfig(
+    num_rounds=get_config(global_config, "simulation.quick_test_rounds", Int),
+    num_items=get_config(global_config, "simulation.default_num_items", Int),
+    global_config=global_config
+)
 
 """
     stress_test_config()
 
 Returns an AuctionConfig for stress testing with many rounds.
 """
-stress_test_config() = AuctionConfig(num_rounds=10000, num_items=5, parallel=true)
+stress_test_config(global_config::GlobalAuctionConfig = load_config()) = AuctionConfig(
+    num_rounds=get_config(global_config, "simulation.stress_test_rounds", Int),
+    num_items=get_config(global_config, "simulation.stress_test_items", Int),
+    parallel=true,
+    global_config=global_config
+)
 
 # Result Types
 """
@@ -349,7 +375,7 @@ function analyze_bidder_performance(results::SimulationResult)
     total_rounds = length(results.revenues)
     n_bidders = length(results.bidder_wins)
     
-    performance_metrics = Dict{String, Any}()
+    performance_metrics = PerformanceDict()
     
     # Calculate win rates
     win_rates = Dict{Int, Float64}()
@@ -379,7 +405,7 @@ end
 Generate comprehensive summary statistics from simulation results.
 """
 function generate_summary_statistics(results::SimulationResult)
-    summary = Dict{String, Any}()
+    summary = PerformanceDict()
     
     # Basic statistics
     summary["auction_type"] = results.auction_type

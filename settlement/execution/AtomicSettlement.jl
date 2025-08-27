@@ -12,6 +12,11 @@ Ensures all-or-nothing semantics for settlement operations.
 using Base: UUID
 using Dates
 
+# Import logging configuration
+include("../../src/logging/LoggingConfig.jl")
+using .LoggingConfig
+using Logging: @info, @warn, @error, @debug
+
 """
     AtomicTransaction
 
@@ -28,8 +33,8 @@ Represents an atomic settlement transaction with two-phase commit support.
 """
 mutable struct AtomicTransaction
     id::UUID
-    auction_result::Any  # AuctionResult type from auction module
-    state::Any  # SettlementState
+    auction_result::AuctionResult  # AuctionResult type from auction module
+    state::SettlementState  # SettlementState
     routes::Vector{Float64}
     metadata::Dict{Symbol, Any}
     prepare_timestamp::Union{DateTime, Nothing}
@@ -62,7 +67,7 @@ Result of atomic settlement execution.
 """
 struct SettlementResult
     transaction::AtomicTransaction
-    execution_result::Any
+    execution_result::ExecutionResult
     price_improvement::Float64
     gas_used::Float64
     latency_ms::Float64
@@ -167,7 +172,8 @@ function commit_phase(protocol::TwoPhaseProtocol, transaction::AtomicTransaction
         catch e
             retry_count += 1
             if retry_count >= protocol.max_retries
-                @error "Commit phase failed after retries" exception=e transaction_id=transaction.id
+                @error "Commit phase failed after retries" exception=e \
+                    transaction_id=transaction.id
                 rethrow(e)
             end
             @warn "Commit phase retry" retry=retry_count transaction_id=transaction.id

@@ -10,6 +10,11 @@ Author: Julia Auction Team
 
 using Random
 using Statistics
+using Dates
+
+# Define StatisticsValue union type for auction statistics
+const StatisticsValue = Union{Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64}, DateTime, Nothing}
+const StatisticsDict = Dict{String, StatisticsValue}
 
 # Note: AbstractAuction, AbstractBidder, AbstractBiddingStrategy, Bid, and AuctionResult 
 # are defined in the main module
@@ -189,7 +194,7 @@ function conduct_auction(auction::AbstractAuction, bidders::Vector{<:AbstractBid
     payment = calculate_payment(winner_info, bids, auction)
     
     # Create result
-    statistics = Dict{String, Any}(
+    statistics = StatisticsDict(
         "num_bidders" => length(bidders),
         "num_valid_bids" => length(bids),
         "highest_bid" => isempty(bids) ? 0.0 : maximum(b.value for b in bids),

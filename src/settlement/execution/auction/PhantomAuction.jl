@@ -3,11 +3,21 @@ module PhantomAuction
 using Base.Threads: Atomic, SpinLock, ReentrantLock
 using Dates
 using SHA
-using Random: rand  # TODO: Remove for production
+# Random removed - using BidGenerator abstraction instead
 using Logging
+
+# Import configuration manager
+include("../../../config/ConfigManager.jl")
+using .ConfigManager: load_config, get_config, AuctionConfig
+
+# Import production bid generation interface
+include("BidGenerator.jl")
+using .BidGenerator: AbstractBidGenerator, ProductionBidGenerator, BidGeneratorConfig
+using .BidGenerator: generate_bid, configure_bid_source, ImprovementBidRequest
 
 export Auction, ImprovementBid, AuctionResult
 export run_auction, submit_bid, reveal_bid, finalize_auction
+export configure_auction_bid_source
 
 # Improvement bid structure
 struct ImprovementBid{T}
@@ -32,7 +42,7 @@ struct AuctionResult{T}
 end
 
 # Phantom auction configuration
-struct AuctionConfig
+struct PhantomAuctionConfig
     duration_ms::Int64
     min_improvement_bps::Float64
     max_improvement_bps::Float64
@@ -42,7 +52,7 @@ end
 
 # Fast phantom auction for price improvement
 mutable struct Auction{T}
-    config::AuctionConfig
+    config::PhantomAuctionConfig
     baseline_price::T
     baseline_amount::T
     token_pair::Tuple{Int64, Int64}
@@ -56,8 +66,16 @@ mutable struct Auction{T}
     is_finalized::Atomic{Bool}
     winning_bid::Union{ImprovementBid{T}, Nothing}
     
-    function Auction{T}(config::AuctionConfig, baseline_price::T, baseline_amount::T,
-                       token_pair::Tuple{Int64, Int64}, deadline::DateTime) where T
+    # Production bid generation
+    bid_generator::AbstractBidGenerator
+    
+    # Global configuration reference
+    global_config::AuctionConfig
+    
+    function Auction{T}(config::PhantomAuctionConfig, baseline_price::T, baseline_amount::T,
+                       token_pair::Tuple{Int64, Int64}, deadline::DateTime,
+                       bid_generator::AbstractBidGenerator = ProductionBidGenerator(),
+                       global_config::AuctionConfig = load_config()) where T
         new{T}(
             config,
             baseline_price,
@@ -69,37 +87,51 @@ mutable struct Auction{T}
             Vector{ImprovementBid{T}}(),
             ReentrantLock(),
             Atomic{Bool}(false),
-            nothing
+            nothing,
+            bid_generator,
+            global_config
         )
     end
 end
 
 # Run fast phantom auction
-function run_auction(request, baseline_price::T, baseline_amount::T, deadline::DateTime) where T
-    config = AuctionConfig(
-        100,    # 100ms duration
-        10,     # 0.1% min improvement
-        50,     # 0.5% max improvement  
-        20,     # 20ms reveal delay
-        2       # Min 2 participants
+function run_auction(request, baseline_price::T, baseline_amount::T, deadline::DateTime; 
+                    global_config::AuctionConfig = load_config()) where T
+    config = PhantomAuctionConfig(
+        get_config(global_config, "phantom_auction.duration_ms", Int64),
+        get_config(global_config, "phantom_auction.min_improvement_bps", Float64),
+        get_config(global_config, "phantom_auction.max_improvement_bps", Float64),
+        get_config(global_config, "phantom_auction.reveal_delay_ms", Int64),
+        get_config(global_config, "phantom_auction.min_participants", Int64)
     )
     
     token_pair = (request.token_in, request.token_out)
     
-    auction = Auction{T}(config, baseline_price, baseline_amount, token_pair, deadline)
+    # Create auction with production bid generator
+    bid_generator = ProductionBidGenerator()
+    auction = Auction{T}(config, baseline_price, baseline_amount, token_pair, deadline, bid_generator, global_config)
     
     # Collect sealed bids
     collection_deadline = Dates.now() + Millisecond(config.duration_ms - config.reveal_delay_ms)
     
     while Dates.now() < collection_deadline
-        # In production, would receive bids from network
-        # Simulating bid collection
-        if rand() < 0.3  # 30% chance of bid per iteration
-            bid = generate_simulated_bid(auction)
+        # Request bid from production bid generator
+        bid_request = ImprovementBidRequest(
+            auction.token_pair,
+            auction.baseline_price,
+            auction.baseline_amount,
+            Float64(auction.config.min_improvement_bps),
+            Float64(auction.config.max_improvement_bps),
+            collection_deadline
+        )
+        
+        bid = generate_bid(auction.bid_generator, bid_request)
+        if bid !== nothing
             submit_bid(auction, bid)
         end
-        # TODO: Replace with async event handling
-        yield()  # Non-blocking yield instead of sleep
+        
+        # Non-blocking yield for cooperative multitasking
+        yield()
     end
     
     # Reveal phase
@@ -112,7 +144,7 @@ function run_auction(request, baseline_price::T, baseline_amount::T, deadline::D
     end
     
     # Wait for reveal deadline
-    # TODO: Replace with async event handling
+    # Wait for reveal deadline with cooperative multitasking
     while Dates.now() < reveal_deadline
         yield()  # Non-blocking yield
     end
@@ -207,12 +239,14 @@ function validate_bid(auction::Auction{T}, bid::ImprovementBid{T}) where T
     end
     
     # Check volume is reasonable
-    if bid.volume <= zero(T) || bid.volume > auction.baseline_amount * T(2)
+    max_volume_multiplier = get_config(auction.global_config, "security.max_bid_value_multiplier", Float64)
+    if bid.volume <= zero(T) || bid.volume > auction.baseline_amount * T(max_volume_multiplier)
         return false
     end
     
     # MEV protection: Check priority fee is reasonable
-    if bid.priority_fee < zero(T) || bid.priority_fee > bid.volume * T(0.01)
+    max_priority_fee_ratio = get_config(auction.global_config, "security.priority_fee_max_ratio", Float64)
+    if bid.priority_fee < zero(T) || bid.priority_fee > bid.volume * T(max_priority_fee_ratio)
         return false
     end
     
@@ -228,7 +262,10 @@ function score_bids(auction::Auction{T}) where T
         price_score = calculate_improvement_bps(auction.baseline_price, bid.improved_price)
         fee_score = bid.priority_fee / auction.baseline_amount * 10000  # In bps
         
-        total_score = price_score * 0.8 + fee_score * 0.2  # 80% price, 20% fee
+        # Configurable scoring weights
+        price_weight = get_config(auction.global_config, "auction_mechanics.price_weight", Float64, 0.8)
+        fee_weight = get_config(auction.global_config, "auction_mechanics.fee_weight", Float64, 0.2)
+        total_score = price_score * price_weight + fee_score * fee_weight
         
         push!(scores, (bid=bid, score=total_score))
     end
@@ -303,46 +340,25 @@ function create_baseline_result(auction::Auction{T}) where T
     )
 end
 
-# TODO: Remove or move to test module
-# Generate simulated bid for testing
-function generate_simulated_bid(auction::Auction{T}) where T
-    bidder_id = string("bidder_", rand(1:100))
-    
-    # Generate improvement within bounds
-    min_improvement = auction.config.min_improvement_bps / 10000
-    max_improvement = auction.config.max_improvement_bps / 10000
-    improvement = min_improvement + rand() * (max_improvement - min_improvement)
-    
-    improved_price = auction.baseline_price * (one(T) + improvement)
-    volume = auction.baseline_amount * (T(0.8) + rand() * T(0.4))  # 80-120% of baseline
-    priority_fee = volume * T(0.0001) * rand()  # Up to 1 bps
-    
-    nonce = rand(Int64)
-    
-    bid = ImprovementBid(
-        bidder_id,
-        auction.token_pair,
-        improved_price,
-        volume,
-        priority_fee,
-        UInt8[],  # Will be filled by commitment
-        nonce,
-        Dates.now()
-    )
-    
-    # Add commitment hash
-    commitment = create_commitment(bid)
-    
-    return ImprovementBid(
-        bid.bidder_id,
-        bid.token_pair,
-        bid.improved_price,
-        bid.volume,
-        bid.priority_fee,
-        commitment,
-        bid.nonce,
-        bid.timestamp
-    )
+# Production bid generation moved to BidGenerator module
+
+"""
+    configure_auction_bid_source(auction, participant_endpoints)
+
+Configure the auction's bid generator with participant network endpoints.
+This allows the auction to source real bids from network participants.
+
+# Arguments
+- `auction::Auction` - Auction instance to configure
+- `participant_endpoints::Vector{String}` - Network endpoints of bid providers
+"""
+function configure_auction_bid_source(auction::Auction, 
+                                     participant_endpoints::Vector{String})
+    if isa(auction.bid_generator, ProductionBidGenerator)
+        configure_bid_source(auction.bid_generator, participant_endpoints)
+    else
+        println("WARNING: Auction is not using ProductionBidGenerator - bid source configuration ignored")
+    end
 end
 
 end # module

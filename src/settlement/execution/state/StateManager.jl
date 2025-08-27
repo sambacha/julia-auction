@@ -4,7 +4,11 @@ using Base.Threads: @spawn, Atomic, ReentrantLock
 using Dates
 using UUIDs
 
-export StateStore, StateSnapshot, StateTransaction, ConflictResolution
+# Define StateValue union type for type safety
+const StateValue = Union{Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64}, Set{UUID}, DateTime, UUID, Nothing}
+const StateDict = Dict{String, StateValue}
+
+export StateStore, StateSnapshot, StateTransaction, ConflictResolution, state_store, StateValue, StateDict
 export begin_transaction, commit_transaction!, rollback_transaction!
 export take_snapshot, restore_snapshot!, validate_state
 export get_state, update_state!, resolve_conflicts
@@ -17,7 +21,7 @@ struct StateSnapshot
     pool_reserves::Dict{Int,Vector{Float64}}
     token_balances::Dict{String,Dict{Int,Float64}}
     pending_settlements::Set{UUID}
-    metadata::Dict{String,Any}
+    metadata::StateDict
     checksum::UInt64
 end
 
@@ -26,7 +30,7 @@ mutable struct StateTransaction
     id::UUID
     start_version::Int
     read_set::Set{String}  # Keys read during transaction
-    write_set::Dict{String,Any}  # Keys to write
+    write_set::StateDict  # Keys to write
     timestamp::DateTime
     status::Symbol  # :active, :committed, :aborted
     isolation_level::Symbol  # :read_committed, :repeatable_read, :serializable
@@ -43,10 +47,10 @@ end
 # Main state store with MVCC
 mutable struct StateStore
     current_version::Atomic{Int}
-    current_state::Dict{String,Any}
+    current_state::StateDict
     snapshots::Vector{StateSnapshot}
     active_transactions::Dict{UUID,StateTransaction}
-    version_history::Dict{Int,Dict{String,Any}}
+    version_history::Dict{Int,StateDict}
     locks::Dict{String,ReentrantLock}
     global_lock::ReentrantLock
     max_snapshots::Int
@@ -55,11 +59,11 @@ mutable struct StateStore
 end
 
 """
-    StateStore(; kwargs...)
+    state_store(; kwargs...)
 
 Create a new state store with optimistic concurrency control.
 """
-function StateStore(;
+function state_store(;
     max_snapshots::Int=100,
     max_versions::Int=1000,
     conflict_strategy::Symbol=:last_write_wins,
@@ -75,16 +79,20 @@ function StateStore(;
     
     return StateStore(
         Atomic{Int}(1),
-        Dict{String,Any}(),
+        StateDict(),
         Vector{StateSnapshot}(),
         Dict{UUID,StateTransaction}(),
-        Dict{Int,Dict{String,Any}}(),
+        Dict{Int,StateDict}(),
         Dict{String,ReentrantLock}(),
         ReentrantLock(),
         max_snapshots,
         max_versions,
         resolution
     )
+end
+
+# Compatibility alias - use state_store() instead
+StateStore(args...; kwargs...) = state_store(args...; kwargs...)
 end
 
 """
@@ -104,7 +112,7 @@ function begin_transaction(store::StateStore;
             transaction_id,
             current_ver,
             Set{String}(),
-            Dict{String,Any}(),
+            StateDict(),
             now(),
             :active,
             isolation_level
@@ -238,7 +246,7 @@ function take_snapshot(store::StateStore)
             pool_reserves,
             token_balances,
             pending,
-            Dict{String,Any}(),
+            StateDict(),
             checksum
         )
         
@@ -345,7 +353,7 @@ end
 
 Update state value within a transaction context.
 """
-function update_state!(store::StateStore, key::String, value::Any,
+function update_state!(store::StateStore, key::String, value::StateValue,
                       transaction::Union{StateTransaction,Nothing}=nothing)
     
     if transaction !== nothing && transaction.status == :active
@@ -479,7 +487,7 @@ end
 
 # Helper functions
 
-function calculate_state_checksum(state::Dict{String,Any})
+function calculate_state_checksum(state::StateDict)
     # Simple checksum based on sorted keys and values
     checksum = UInt64(0)
     for key in sort(collect(keys(state)))

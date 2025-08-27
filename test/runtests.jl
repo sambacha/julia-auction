@@ -1,6 +1,7 @@
 using Test
 using Random
 using Statistics
+using Dates
 using AuctionSimulator
 
 # Set random seed for reproducible tests
@@ -44,7 +45,9 @@ Random.seed!(42)
         @testset "AuctionResult Construction" begin
             auction = FirstPriceAuction()
             bids = [Bid(1, 50.0), Bid(2, 75.0)]
-            stats = Dict{String, Any}("revenue" => 75.0, "efficiency" => 0.9)
+            # Use StatisticsDict (defined in AuctionSimulator.jl)
+            StatisticsDict = Dict{String, Union{Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64}, DateTime, Nothing}}
+            stats = StatisticsDict("revenue" => 75.0, "efficiency" => 0.9)
             
             result = AuctionResult(auction, 2, 75.0, bids, stats)
             
@@ -54,7 +57,7 @@ Random.seed!(42)
             @test result.statistics == stats
             
             # Test no winner case
-            result_no_winner = AuctionResult(auction, nothing, 0.0, Bid[], Dict{String, Any}())
+            result_no_winner = AuctionResult(auction, nothing, 0.0, Bid[], StatisticsDict())
             @test result_no_winner.winner_id === nothing
         end
     end

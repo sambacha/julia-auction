@@ -81,5 +81,5 @@ end
 
 struct WorkflowHandle
     workflow_id::UUID
-    orchestrator_ref::Any  # Reference to orchestrator
+    orchestrator_ref::Union{AuctionController, Nothing}  # Reference to orchestrator
 end

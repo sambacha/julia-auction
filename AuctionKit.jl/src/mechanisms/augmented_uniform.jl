@@ -18,7 +18,10 @@ struct AugmentedUniformPriceAuction{T} <: SealedBidAuction{T}
     allow_partial_fills::Bool
 end
 
-function finalize_augmented_uniform_auction(auction::AugmentedUniformPriceAuction{T}, bids::Vector{Bid}) where T
+function finalize_augmented_uniform_auction(
+    auction::AugmentedUniformPriceAuction{T},
+    bids::Vector{Bid}
+) where T
     # Convert AuctionKit bids to augmented auction format
     augmented_bids = [
         AugmentedUniformPriceAuction.Bid(

@@ -4,6 +4,9 @@
 using HTTP
 using JSON3
 
+# Import MetadataValue and MetadataDict from abstract.jl
+using ..Actors: MetadataValue, MetadataDict
+
 """
     BidSubmissionInterface
 
@@ -49,7 +52,7 @@ function submitDirectBid(
     bidder_id::UUID,
     amount::T,
     quantity::Int = 1;
-    metadata::Dict{Symbol, Any} = Dict{Symbol, Any}()
+    metadata::MetadataDict = MetadataDict()
 ) where T
     # Find the auction actor
     actor = nothing
@@ -99,7 +102,7 @@ end
 function createAuctionDirect(
     interface::DirectBidInterface,
     auction_type::Symbol,
-    config::Dict{Symbol, Any}
+    config::MetadataDict
 )
     actor = createAuctionActor(
         auction_type,
@@ -183,7 +186,7 @@ function startRPCServer(interface::RPCBidInterface)
         try
             body = JSON3.read(String(req.body))
             auction_type = Symbol(get(body, :auction_type, "first_price"))
-            config = Dict{Symbol, Any}(body.config)
+            config = MetadataDict(body.config)
             
             result = createAuctionDirect(
                 DirectBidInterface(interface.controller),
@@ -215,7 +218,7 @@ function startRPCServer(interface::RPCBidInterface)
                 bidder_id,
                 amount,
                 quantity;
-                metadata = Dict{Symbol, Any}(metadata)
+                metadata = MetadataDict(metadata)
             )
             
             return HTTP.Response(200, JSON3.write(result))

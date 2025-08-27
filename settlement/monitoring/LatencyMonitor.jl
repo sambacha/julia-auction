@@ -16,6 +16,11 @@ using .Metrics: MetricsCollector, record_metric
 using .Alerts: AlertManager, check_threshold
 using Dates
 
+"""
+Union type for metric values - replaces Any type for type safety in metrics collection.
+"""
+const MetricValue = Union{Float64, Int64, String, Bool, Vector{Float64}, NamedTuple}
+
 mutable struct LatencyMonitor
     metrics_collector::MetricsCollector
     alert_manager::AlertManager
@@ -55,7 +60,7 @@ struct LatencyTrace
     start_time::Int64  # nanoseconds
     end_time::Int64
     phases::Dict{Symbol, Tuple{Int64, Int64}}  # phase => (start_ns, end_ns)
-    metadata::Dict{Symbol, Any}
+    metadata::Dict{Symbol, MetricValue}
 end
 
 """
@@ -106,7 +111,7 @@ function start_trace(monitor::LatencyMonitor, transaction_id::UUID)
         time_ns(),
         0,
         Dict{Symbol, Tuple{Int64, Int64}}(),
-        Dict{Symbol, Any}()
+        Dict{Symbol, MetricValue}()
     )
 end
 
@@ -187,7 +192,7 @@ Generate a comprehensive performance report.
 - `PerformanceReport` with detailed metrics
 """
 function generate_report(monitor::LatencyMonitor)
-    report_data = Dict{Symbol, Any}()
+    report_data = Dict{Symbol, MetricValue}()
     
     # Collect metrics for each phase
     for phase in keys(monitor.latency_buckets)
@@ -209,7 +214,7 @@ end
 
 struct PerformanceReport
     timestamp::DateTime
-    metrics::Dict{Symbol, Any}
+    metrics::Dict{Symbol, MetricValue}
     recommendations::Vector{String}
 end
 
@@ -252,7 +257,7 @@ function calculate_sla_compliance(monitor::LatencyMonitor)
     return compliant / length(end_to_end) * 100
 end
 
-function generate_recommendations(metrics::Dict{Symbol, Any})
+function generate_recommendations(metrics::Dict{Symbol, MetricValue})
     recommendations = String[]
     
     # Check orchestration latency

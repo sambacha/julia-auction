@@ -54,11 +54,11 @@ end
 # Main orchestrator managing settlement lifecycle
 mutable struct Orchestrator{T}
     config::OrchestratorConfig
-    cfmm_bridge::Any  # TODO: Replace with Union{Bridge{T}, Nothing}
-    phantom_auction::Any  # TODO: Replace with Union{Auction{T}, Nothing}
-    state_manager::Any  # TODO: Replace with Union{StateManager, Nothing}
-    atomic_settler::Any  # TODO: Replace with Union{AtomicSettlement, Nothing}
-    latency_monitor::Any  # TODO: Replace with Union{LatencyMonitor, Nothing}
+    cfmm_bridge::Union{CFMMBridge, Nothing}
+    phantom_auction::Union{PhantomAuction, Nothing}
+    state_manager::Union{StateManager, Nothing}
+    atomic_settler::Union{AtomicSettlement, Nothing}
+    latency_monitor::Union{LatencyMonitor, Nothing}
     
     active_settlements::Dict{UUID, SettlementRequest{T}}
     settlement_status::Dict{UUID, Atomic{SettlementStatus}}

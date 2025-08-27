@@ -42,6 +42,11 @@ module PostCFMMSettlement
 using UUIDs
 using Dates
 
+# Import logging configuration
+include("../logging/LoggingConfig.jl")
+using .LoggingConfig
+using Logging: @info, @warn, @error, @debug
+
 # Include submodules
 include("orchestration/SettlementOrchestrator.jl")
 include("bridge/cfmm/CFMMBridge.jl")
@@ -111,7 +116,7 @@ mutable struct SettlementSystem{T}
     config::SettlementConfig
     orchestrator::SettlementOrchestrator.Orchestrator{T}
     cfmm_bridge::CFMMBridge.Bridge{T}
-    phantom_auction::Any  # Would be proper auction type
+    phantom_auction::Union{PhantomAuction, Nothing}  # Would be proper auction type
     
     # Metrics
     total_settlements::Int64
@@ -251,27 +256,27 @@ function simulate_settlement_flow(; amount = 1000.0, tokens = (1, 2))
         slippage = 0.01
     )
     
-    println("Processing settlement request: $(request.id)")
+    @info "Processing settlement request" request_id=request.id
     
     # Process settlement
     result = process_settlement(system, request)
     
     # Display results
-    println("\nSettlement Results:")
-    println("  Status: $(result.status)")
-    println("  CFMM Price: $(result.cfmm_price)")
+    @info "Settlement Results"
+    @info "Settlement status" status=result.status
+    @info "CFMM price" price=result.cfmm_price
     if result.improved_price !== nothing
-        println("  Improved Price: $(result.improved_price)")
-        println("  Improvement: $(result.improvement_bps) bps")
+        @info "Improved price" price=result.improved_price
+        @info "Price improvement" improvement_bps=result.improvement_bps
     end
-    println("  Amount Out: $(result.amount_out)")
-    println("  Execution Time: $(result.execution_time_ms) ms")
+    @info "Amount out" amount=result.amount_out
+    @info "Execution time" time_ms=result.execution_time_ms
     
     # Show metrics
     metrics = get_system_metrics(system)
-    println("\nSystem Metrics:")
-    println("  Success Rate: $(round(metrics.success_rate * 100, digits=1))%")
-    println("  Avg Improvement: $(round(metrics.avg_improvement_bps, digits=2)) bps")
+    @info "System Metrics"
+    @info "System success rate" success_rate_percent=round(metrics.success_rate * 100, digits=1)
+    @info "Average improvement" avg_improvement_bps=round(metrics.avg_improvement_bps, digits=2)
     
     return result
 end

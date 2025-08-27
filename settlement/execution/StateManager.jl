@@ -15,13 +15,20 @@ using .Recovery: RecoveryManager, checkpoint_state, restore_checkpoint
 using Base: UUID
 using Dates
 
+# Define StateValue union type for type safety
+const StateValue = Union{
+    Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64},
+    Set{UUID}, DateTime, UUID, Nothing
+}
+const StateDict = Dict{String, StateValue}
+
 mutable struct SettlementState
     id::UUID
     status::Symbol  # :pending, :prepared, :committed, :rolled_back
     created_at::DateTime
     updated_at::DateTime
-    checkpoints::Vector{Dict{String, Any}}
-    metadata::Dict{Symbol, Any}
+    checkpoints::Vector{StateDict}
+    metadata::Dict{Symbol, StateValue}
 end
 
 mutable struct StateManager
@@ -68,8 +75,8 @@ function create_transaction(manager::StateManager, auction_result)
             :pending,
             now(),
             now(),
-            Vector{Dict{String, Any}}(),
-            Dict{Symbol, Any}(
+            Vector{StateDict}(),
+            Dict{Symbol, StateValue}(
                 :auction_id => auction_result.auction_id,
                 :winner_id => auction_result.winner_id,
                 :winning_price => auction_result.winning_price

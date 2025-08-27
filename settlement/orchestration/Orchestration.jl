@@ -14,6 +14,11 @@ module Orchestration
 export SettlementOrchestrator, PhantomAuction
 export orchestrate_settlement, create_phantom_auction
 
+# Export coordinator functionality
+export CoordinationContext, ConsensusProtocol, Participant, Vote
+export coordinate_settlement, register_participant, unregister_participant
+export check_consensus, monitor_health, handle_failure
+
 # Submodule for coordination logic (future extensibility)
 include("coordinator/Coordinator.jl")
 using .Coordinator

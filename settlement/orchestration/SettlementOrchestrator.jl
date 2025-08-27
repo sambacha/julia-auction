@@ -66,7 +66,7 @@ including phantom auction overlay, CFMM routing, and atomic commitment.
 function orchestrate_settlement(
     orchestrator::SettlementOrchestrator,
     auction_result::AuctionResult
-)
+)::SettlementResult
     # Phase 1: Prepare settlement
     transaction = prepare_settlement(orchestrator, auction_result)
     
@@ -92,7 +92,7 @@ end
 function prepare_settlement(
     orchestrator::SettlementOrchestrator,
     auction_result::AuctionResult
-)
+)::AtomicTransaction
     # Create atomic transaction
     transaction = create_transaction(orchestrator.state_manager, auction_result)
     
@@ -110,7 +110,7 @@ end
 function commit_settlement(
     orchestrator::SettlementOrchestrator,
     transaction::AtomicTransaction
-)
+)::SettlementResult
     # Execute on CFMM
     execution_result = execute_transaction(
         orchestrator.cfmm_bridge,
@@ -129,7 +129,7 @@ end
 function rollback_settlement(
     orchestrator::SettlementOrchestrator,
     transaction::AtomicTransaction
-)
+)::Nothing
     # Rollback state changes
     rollback_transaction!(orchestrator.state_manager, transaction)
     

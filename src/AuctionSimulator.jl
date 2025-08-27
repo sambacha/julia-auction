@@ -28,6 +28,11 @@ module AuctionSimulator
 
 using Random
 using Statistics
+using Dates
+
+# Define StatisticsValue union type for auction statistics
+const StatisticsValue = Union{Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64}, DateTime, Nothing}
+const StatisticsDict = Dict{String, StatisticsValue}
 
 # Export abstract types
 export AbstractBidder, AbstractAuction, AbstractBiddingStrategy
@@ -188,7 +193,7 @@ Contains the complete results of an auction including winner, final price, and s
 - `winner_id::Union{Int, Nothing}`: ID of the winning bidder (Nothing if no winner)
 - `winning_price::Float64`: Final price paid by the winner
 - `all_bids::Vector{Bid}`: Complete history of all bids made
-- `statistics::Dict{String, Any}`: Additional statistics and metadata
+- `statistics::StatisticsDict`: Additional statistics and metadata
 
 # Examples
 ```julia
@@ -206,11 +211,11 @@ struct AuctionResult{T <: AbstractAuction}
     winner_id::Union{Int, Nothing}
     winning_price::Float64
     all_bids::Vector{Bid}
-    statistics::Dict{String, Any}
+    statistics::StatisticsDict
     
     function AuctionResult(auction_type::T, winner_id::Union{Int, Nothing}, 
                           winning_price::Float64, all_bids::Vector{Bid}, 
-                          statistics::Dict{String, Any}) where {T <: AbstractAuction}
+                          statistics::StatisticsDict) where {T <: AbstractAuction}
         if winning_price < 0
             throw(ArgumentError("Winning price must be non-negative"))
         end

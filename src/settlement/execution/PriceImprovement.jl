@@ -3,7 +3,7 @@ module PriceImprovement
 using Statistics
 using LinearAlgebra
 
-export PriceImprovementCalculator, ImprovementMetrics, ValueAttribution
+export PriceImprovementCalculator, ImprovementMetrics, ValueAttribution, price_improvement_calculator
 export calculate_improvement, validate_improvement_bounds, attribute_value
 export get_improvement_metrics, update_baseline, calculate_surplus
 
@@ -52,11 +52,11 @@ mutable struct PriceImprovementCalculator
 end
 
 """
-    PriceImprovementCalculator(; kwargs...)
+    price_improvement_calculator(; kwargs...)
 
 Create a price improvement calculator with configurable bounds.
 """
-function PriceImprovementCalculator(;
+function price_improvement_calculator(;
     min_improvement_bps::Float64=10.0,  # 0.1%
     max_improvement_bps::Float64=50.0,  # 0.5%
     protocol_fee_bps::Float64=5.0,  # 0.05%
@@ -81,6 +81,10 @@ function PriceImprovementCalculator(;
         Vector{ImprovementMetrics}(),
         attribution_config
     )
+end
+
+# Compatibility alias - use price_improvement_calculator() instead
+PriceImprovementCalculator(args...; kwargs...) = price_improvement_calculator(args...; kwargs...)
 end
 
 """

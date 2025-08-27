@@ -1,6 +1,10 @@
 # Abstract types for the actor system
 # Following A/HC/LC naming pattern: Action + High Context + Low Context
 
+# Define MetadataValue union type for type safety
+const MetadataValue = Union{Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64}, UUID, DateTime, Symbol, Nothing}
+const MetadataDict = Dict{Symbol, MetadataValue}
+
 abstract type AbstractActor{T} end
 abstract type ActorMessage end
 abstract type ActorState{T} end
@@ -25,7 +29,7 @@ struct AuctionResult{T}
     allocations::Dict{UUID, T}
     payments::Dict{UUID, T}
     timestamp::DateTime
-    metadata::Dict{Symbol, Any}
+    metadata::MetadataDict
 end
 
 """
@@ -39,10 +43,10 @@ struct Bid{T}
     amount::T
     quantity::Int
     timestamp::DateTime
-    metadata::Dict{Symbol, Any}
+    metadata::MetadataDict
     
     function Bid(bidder_id::UUID, amount::T, quantity::Int=1; 
-                 metadata::Dict{Symbol, Any}=Dict{Symbol, Any}()) where T
+                 metadata::MetadataDict=MetadataDict()) where T
         new{T}(uuid4(), bidder_id, amount, quantity, now(), metadata)
     end
 end
@@ -58,11 +62,11 @@ struct Bidder{T}
     budget::T
     valuation::T
     strategy::Symbol
-    metadata::Dict{Symbol, Any}
+    metadata::MetadataDict
     
     function Bidder(name::String, budget::T, valuation::T; 
                    strategy::Symbol=:truthful,
-                   metadata::Dict{Symbol, Any}=Dict{Symbol, Any}()) where T
+                   metadata::MetadataDict=MetadataDict()) where T
         new{T}(uuid4(), name, budget, valuation, strategy, metadata)
     end
 end
