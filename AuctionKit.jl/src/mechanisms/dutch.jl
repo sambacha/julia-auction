@@ -40,7 +40,6 @@ mutable struct DutchAuction{T} <: OpenOutcryAuction{T}
     end
 end
 
-# A/HC/LC: update + Current + Price
 function updateCurrentPrice(mechanism::DutchAuction{T}) where T
     current_time = now()
     elapsed_seconds = (current_time - mechanism.last_tick).value / 1000.0
@@ -59,8 +58,7 @@ function updateCurrentPrice(mechanism::DutchAuction{T}) where T
     return mechanism.current_price
 end
 
-# A/HC/LC: determine + Clearing + Price
-function determineClearingPrice(mechanism::DutchAuction{T}, bids::Vector{Bid{T}}) where T
+function determine_clearing_price(mechanism::DutchAuction{T}, bids::Vector{Bid{T}}) where T
     # Update price based on time
     current_price = updateCurrentPrice(mechanism)
     
@@ -76,8 +74,7 @@ function determineClearingPrice(mechanism::DutchAuction{T}, bids::Vector{Bid{T}}
     end
 end
 
-# A/HC/LC: allocate + Winners
-function allocateWinners(
+function allocate_winners(
     mechanism::DutchAuction{T}, 
     bids::Vector{Bid{T}}, 
     clearing_price::T
@@ -112,8 +109,7 @@ function allocateWinners(
     return winners, allocations
 end
 
-# A/HC/LC: calculate + Payments
-function calculatePayments(
+function calculate_payments(
     mechanism::DutchAuction{T},
     winners::Vector{UUID},
     allocations::Dict{UUID, T},
@@ -130,7 +126,6 @@ function calculatePayments(
     return payments
 end
 
-# A/HC/LC: finalize + Dutch + Auction
 function finalizeDutchAuction(state::AuctionState{T}) where T
     mechanism = DutchAuction(
         starting_price = state.reserve_price * T(2),  # Start at 2x reserve
@@ -139,9 +134,9 @@ function finalizeDutchAuction(state::AuctionState{T}) where T
         max_quantity = state.max_quantity
     )
     
-    clearing_price = determineClearingPrice(mechanism, state.current_bids)
-    winners, allocations = allocateWinners(mechanism, state.current_bids, clearing_price)
-    payments = calculatePayments(mechanism, winners, allocations, clearing_price)
+    clearing_price = determine_clearing_price(mechanism, state.current_bids)
+    winners, allocations = allocate_winners(mechanism, state.current_bids, clearing_price)
+    payments = calculate_payments(mechanism, winners, allocations, clearing_price)
     
     return AuctionResult{T}(
         state.auction_id,

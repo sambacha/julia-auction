@@ -1,8 +1,7 @@
-using Test
 using AuctionKit
-using UUIDs
 using Dates
-
+using Test
+using UUIDs
 @testset "AuctionKit.jl Tests" begin
     
     @testset "Event Log Tests" begin
@@ -21,7 +20,7 @@ using Dates
             Dict{Symbol, Any}()
         )
         
-        appendEventToLog(log, auction_id, event)
+        append_event_to_log(log, auction_id, event)
         
         # Query events
         events = queryEventsByAuction(log, auction_id)
@@ -130,7 +129,7 @@ using Dates
         event_log = CentralizedEventLog()
         
         # Create auction actor
-        actor = createAuctionActor(
+        actor = create_auction_actor(
             :first_price,
             Dict{Symbol, Any}(
                 :reserve_price => 10.0,
@@ -153,21 +152,21 @@ using Dates
             now()
         )
         
-        sendMessageToActor(actor, msg)
+        send_message_to_actor(actor, msg)
         sleep(0.1)  # Allow processing
         
         @test length(actor.state.current_bids) == 1
         
         # Finalize auction
         finalize_msg = FinalizeMessage(false, now())
-        sendMessageToActor(actor, finalize_msg)
+        send_message_to_actor(actor, finalize_msg)
         sleep(0.1)
         
         @test actor.state.status == :completed
         @test !isnothing(actor.state.result)
         
         # Clean up
-        stopActorGracefully(actor)
+        stop_actor_gracefully(actor)
     end
     
     @testset "Auction Controller" begin

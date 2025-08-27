@@ -36,7 +36,6 @@ mutable struct EnglishAuction{T} <: OpenOutcryAuction{T}
     end
 end
 
-# A/HC/LC: validate + New + Bid
 function validateNewBid(mechanism::EnglishAuction{T}, bid::Bid{T}) where T
     # Bid must be at least current price plus increment
     min_valid_bid = mechanism.current_price + mechanism.increment
@@ -54,7 +53,6 @@ function validateNewBid(mechanism::EnglishAuction{T}, bid::Bid{T}) where T
     return true, ""
 end
 
-# A/HC/LC: accept + English + Bid
 function acceptEnglishBid(mechanism::EnglishAuction{T}, bid::Bid{T}) where T
     valid, msg = validateNewBid(mechanism, bid)
     if !valid
@@ -72,7 +70,6 @@ function acceptEnglishBid(mechanism::EnglishAuction{T}, bid::Bid{T}) where T
     return true, "Bid accepted as new leader"
 end
 
-# A/HC/LC: should + Close + English
 function shouldCloseEnglish(mechanism::EnglishAuction{T}) where T
     if isnothing(mechanism.current_leader)
         return false
@@ -82,8 +79,8 @@ function shouldCloseEnglish(mechanism::EnglishAuction{T}) where T
     return elapsed_seconds > mechanism.inactive_duration
 end
 
-# A/HC/LC: determine + Clearing + Price
-function determineClearingPrice(mechanism::EnglishAuction{T}, bids::Vector{Bid{T}}) where T
+function determine_clearing_price(mechanism::EnglishAuction{T},
+    bids::Vector{Bid{T}}) where T
     # In English auction, clearing price is the final highest bid
     if isnothing(mechanism.current_leader)
         return mechanism.starting_price
@@ -91,8 +88,7 @@ function determineClearingPrice(mechanism::EnglishAuction{T}, bids::Vector{Bid{T
     return mechanism.current_price
 end
 
-# A/HC/LC: allocate + Winners
-function allocateWinners(
+function allocate_winners(
     mechanism::EnglishAuction{T}, 
     bids::Vector{Bid{T}}, 
     clearing_price::T
@@ -107,8 +103,7 @@ function allocateWinners(
     return winners, allocations
 end
 
-# A/HC/LC: calculate + Payments
-function calculatePayments(
+function calculate_payments(
     mechanism::EnglishAuction{T},
     winners::Vector{UUID},
     allocations::Dict{UUID, T},
@@ -125,7 +120,6 @@ function calculatePayments(
     return payments
 end
 
-# A/HC/LC: finalize + English + Auction
 function finalizeEnglishAuction(state::AuctionState{T}) where T
     mechanism = EnglishAuction(
         starting_price = state.reserve_price,
@@ -139,9 +133,9 @@ function finalizeEnglishAuction(state::AuctionState{T}) where T
         acceptEnglishBid(mechanism, bid)
     end
     
-    clearing_price = determineClearingPrice(mechanism, state.current_bids)
-    winners, allocations = allocateWinners(mechanism, state.current_bids, clearing_price)
-    payments = calculatePayments(mechanism, winners, allocations, clearing_price)
+    clearing_price = determine_clearing_price(mechanism, state.current_bids)
+    winners, allocations = allocate_winners(mechanism, state.current_bids, clearing_price)
+    payments = calculate_payments(mechanism, winners, allocations, clearing_price)
     
     return AuctionResult{T}(
         state.auction_id,

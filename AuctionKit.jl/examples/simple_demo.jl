@@ -5,9 +5,8 @@ using Pkg
 Pkg.activate(dirname(@__DIR__))
 
 using AuctionKit
-using UUIDs
 using Dates
-
+using UUIDs
 println("=== AuctionKit.jl Demo ===\n")
 
 # 1. Event Log System
@@ -24,7 +23,7 @@ events_to_log = [
 ]
 
 for event in events_to_log
-    appendEventToLog(log, auction_id, event)
+    append_event_to_log(log, auction_id, event)
 end
 
 println("✓ Logged $(length(events_to_log)) bid events")
@@ -101,7 +100,7 @@ println("\n4. Actor-Based Concurrency")
 println("-" ^ 40)
 
 # Create an auction actor
-actor = createAuctionActor(
+actor = create_auction_actor(
     :first_price,
     Dict{Symbol, Any}(
         :reserve_price => 100.0,
@@ -128,14 +127,14 @@ bid_msg = BidMessage(
     Dict{Symbol, Any}(),
     now()
 )
-sendMessageToActor(actor, bid_msg)
+send_message_to_actor(actor, bid_msg)
 sleep(0.1)  # Allow processing
 
 println("✓ Bid submitted via actor message")
 println("✓ Current bids in auction: $(length(actor.state.current_bids))")
 
 # Clean up
-stopActorGracefully(actor)
+stop_actor_gracefully(actor)
 stopController(controller)
 
 println("\n=== Demo Complete ===")

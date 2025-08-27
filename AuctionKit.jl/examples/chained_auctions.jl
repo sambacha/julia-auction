@@ -1,7 +1,6 @@
 # Chained auctions example demonstrating workflow orchestration
 using AuctionKit
 using UUIDs
-
 println("=== Chained Auctions Example ===\n")
 println("Scenario: Multi-stage procurement auction")
 println("Stage 1: Suppliers bid to provide raw materials (Dutch auction)")

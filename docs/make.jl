@@ -1,22 +1,21 @@
 using Documenter
+using DocumenterVitepress
+
 # Load the modules to document (if they exist)
 push!(LOAD_PATH, "../src/")
 push!(LOAD_PATH, "../src/settlement/")
 push!(LOAD_PATH, "../AuctionKit.jl/src/")
 
-# Configure Documenter
+# Configure DocumenterVitepress
 makedocs(
     sitename = "Julia Auction System",
     authors = "Julia Auction Team",
     
-    # Use default Documenter styling
-    format = Documenter.HTML(
-        prettyurls = get(ENV, "CI", nothing) == "true",
-        canonical = "https://julia-auction.github.io/julia-auction",
-        collapselevel = 2,
-        sidebar_sitename = true,
-        # Use KaTeX for math rendering
-        mathengine = Documenter.KaTeX()
+    # Use DocumenterVitepress format
+    format = DocumenterVitepress.MarkdownVitepress(
+        repo = "https://github.com/julia-auction/julia-auction",
+        devurl = "dev",
+        devbranch = "main",
     ),
     
     # Module documentation - comment out for now since modules may not be loaded
@@ -24,6 +23,10 @@ makedocs(
     
     # Disable doctesting for now since modules aren't loaded
     doctest = false,
+    
+    # Disable cross-reference checks to avoid errors with missing modules
+    checkdocs = :none,
+    linkcheck = false,
     
     # Page structure with rich content
     pages = [

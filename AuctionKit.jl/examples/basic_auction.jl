@@ -1,7 +1,6 @@
 # Basic auction example
 using AuctionKit
 using UUIDs
-
 println("=== Basic First-Price Auction Example ===\n")
 
 # Create controller and event log
