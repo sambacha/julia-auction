@@ -3,11 +3,9 @@ module CFMMBridge
 using Base.Threads: @spawn, SpinLock
 using LinearAlgebra
 using Logging
-
 # Import CFMMRouter for real execution
 using ..CFMMRouter
 using ..CFMMRouter: Router, route!, LinearNonnegative, ProductTwoCoin, GeometricMeanTwoCoin, UniV3, CFMM
-
 export Bridge, RoutingResult, ExecutionResult
 export get_route, execute_direct, get_baseline_price
 

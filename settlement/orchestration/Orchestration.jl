@@ -22,7 +22,6 @@ export check_consensus, monitor_health, handle_failure
 # Submodule for coordination logic (future extensibility)
 include("coordinator/Coordinator.jl")
 using .Coordinator
-
 include("SettlementOrchestrator.jl")
 include("PhantomAuction.jl")
 

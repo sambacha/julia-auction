@@ -8,7 +8,6 @@ module Metrics
 export MetricsCollector, record_metric, get_metric, reset_collector!
 
 using Dates
-
 mutable struct MetricsCollector
     metrics::Dict{Symbol, Vector{Tuple{DateTime, Float64}}}
     aggregates::Dict{Symbol, Dict{Symbol, Float64}}

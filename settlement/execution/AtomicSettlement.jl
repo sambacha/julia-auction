@@ -11,12 +11,10 @@ Ensures all-or-nothing semantics for settlement operations.
 
 using Base: UUID
 using Dates
-
 # Import logging configuration
 include("../../src/logging/LoggingConfig.jl")
 using .LoggingConfig
 using Logging: @info, @warn, @error, @debug
-
 """
     AtomicTransaction
 

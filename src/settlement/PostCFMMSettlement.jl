@@ -14,7 +14,6 @@ through phantom auctions after CFMM routing.
 # Usage
 ```julia
 using PostCFMMSettlement
-
 # Configure the system
 config = SettlementConfig(
     max_auction_duration_ms = 100,
@@ -39,24 +38,21 @@ result = process_settlement(settlement_system, request)
 """
 module PostCFMMSettlement
 
-using UUIDs
 using Dates
-
+using UUIDs
 # Import logging configuration
 include("../logging/LoggingConfig.jl")
 using .LoggingConfig
 using Logging: @info, @warn, @error, @debug
-
 # Include submodules
 include("orchestration/SettlementOrchestrator.jl")
 include("bridge/cfmm/CFMMBridge.jl")
 include("execution/auction/PhantomAuction.jl")
 
 # Import from submodules
-using .SettlementOrchestrator
 using .CFMMBridge
 using .PhantomAuction
-
+using .SettlementOrchestrator
 # Re-export key types and functions
 export SettlementConfig, SettlementSystem, SettlementRequest, SettlementResult
 export initialize_settlement_system, process_settlement

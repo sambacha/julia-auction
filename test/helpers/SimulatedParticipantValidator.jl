@@ -8,14 +8,12 @@ This module contains test/simulation code that was removed from production modul
 """
 module SimulatedParticipantValidator
 
-using Random
 using Base: UUID
 using Dates: DateTime, now
-
+using Random
 # Import the production interfaces
 include("../../settlement/orchestration/coordinator/ParticipantDecisionInterface.jl")
 using .ParticipantDecisionInterface: AbstractParticipantValidator, ValidationRequest, ValidationResult
-
 export SimulatedValidator, simulate_participant_decision, configure_failure_rates!
 
 """

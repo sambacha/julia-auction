@@ -9,9 +9,8 @@ Based on Wilson (1979) and subsequent auction theory research.
 module AugmentedUniformPriceAuction
 
 using Base.Threads: Atomic, @spawn
-using Statistics
 using LinearAlgebra
-
+using Statistics
 export ElasticSupplySchedule, SupplyPoint, ElasticityType
 export AuctionConfig, Bid, AuctionResult, BidAllocation
 export TieBreakingStrategy, StandardTieBreaking, AugmentedTieBreaking

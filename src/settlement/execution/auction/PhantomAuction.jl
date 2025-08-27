@@ -5,16 +5,13 @@ using Dates
 using SHA
 # Random removed - using BidGenerator abstraction instead
 using Logging
-
 # Import configuration manager
 include("../../../config/ConfigManager.jl")
 using .ConfigManager: load_config, get_config, AuctionConfig
-
 # Import production bid generation interface
 include("BidGenerator.jl")
 using .BidGenerator: AbstractBidGenerator, ProductionBidGenerator, BidGeneratorConfig
 using .BidGenerator: generate_bid, configure_bid_source, ImprovementBidRequest
-
 export Auction, ImprovementBid, AuctionResult
 export run_auction, submit_bid, reveal_bid, finalize_auction
 export configure_auction_bid_source

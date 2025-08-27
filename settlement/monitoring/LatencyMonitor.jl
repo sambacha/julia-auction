@@ -12,10 +12,9 @@ Tracks latencies at microsecond resolution across all settlement phases.
 - End-to-end settlement latency
 """
 
-using .Metrics: MetricsCollector, record_metric
 using .Alerts: AlertManager, check_threshold
+using .Metrics: MetricsCollector, record_metric
 using Dates
-
 """
 Union type for metric values - replaces Any type for type safety in metrics collection.
 """

@@ -76,10 +76,9 @@ mechanisms rather than placeholder calculations.
 #
 # ============================================================================
 
-using UUIDs
-using Statistics
 using Dates
-
+using Statistics
+using UUIDs
 # TEMPORARY PLACEHOLDERS - Remove when integrating with real modules
 const Bid = Any
 const AtomicTransaction = Any

@@ -1,9 +1,8 @@
-using Test
+using AuctionSimulator
+using Dates
 using Random
 using Statistics
-using Dates
-using AuctionSimulator
-
+using Test
 # Set random seed for reproducible tests
 Random.seed!(42)
 

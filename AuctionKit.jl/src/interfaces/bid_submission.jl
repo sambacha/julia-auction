@@ -3,10 +3,8 @@
 
 using HTTP
 using JSON3
-
 # Import MetadataValue and MetadataDict from abstract.jl
 using ..Actors: MetadataValue, MetadataDict
-
 """
     BidSubmissionInterface
 
@@ -84,7 +82,7 @@ function submitDirectBid(
     )
     
     # Submit to actor
-    sendMessageToActor(actor, msg)
+    send_message_to_actor(actor, msg)
     
     # Wait for response (simplified - in production would use futures)
     return Dict(
@@ -104,7 +102,7 @@ function createAuctionDirect(
     auction_type::Symbol,
     config::MetadataDict
 )
-    actor = createAuctionActor(
+    actor = create_auction_actor(
         auction_type,
         config;
         event_log = interface.controller.state.event_log
@@ -148,7 +146,7 @@ function finalizeAuctionDirect(
     end
     
     msg = FinalizeMessage(false, now())
-    sendMessageToActor(actor, msg)
+    send_message_to_actor(actor, msg)
     
     # Wait for finalization
     max_wait = 10.0

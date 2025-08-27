@@ -2,7 +2,6 @@
 # Following A/HC/LC naming pattern
 
 using Graphs: SimpleDiGraph, add_edge!, is_cyclic
-
 """
     AuctionController{T}
 
@@ -211,7 +210,7 @@ function executeAuctionNode(
 ) where T
     # Create auction actor
     auction_type = get(config, :auction_type, :first_price)
-    actor = createAuctionActor(auction_type, config; event_log=controller.state.event_log)
+    actor = create_auction_actor(auction_type, config; event_log=controller.state.event_log)
     
     lock(controller.state.mutex) do
         controller.state.active_actors[actor.id] = actor
@@ -231,7 +230,7 @@ function executeAuctionNode(
             get(bid_data, :metadata, Dict{Symbol, Any}()),
             now()
         )
-        sendMessageToActor(actor, msg)
+        send_message_to_actor(actor, msg)
     end
     
     # Wait for auction duration or immediate finalization
@@ -242,7 +241,7 @@ function executeAuctionNode(
     
     # Finalize auction
     finalize_msg = FinalizeMessage(false, now())
-    sendMessageToActor(actor, finalize_msg)
+    send_message_to_actor(actor, finalize_msg)
     
     # Wait for result
     max_wait = 10.0  # seconds
@@ -257,7 +256,7 @@ function executeAuctionNode(
     result = actor.state.result
     
     # Clean up
-    stopActorGracefully(actor)
+    stop_actor_gracefully(actor)
     lock(controller.state.mutex) do
         delete!(controller.state.active_actors, actor.id)
     end
@@ -361,7 +360,7 @@ function stopController(controller::AuctionController)
     # Stop all active actors
     lock(controller.state.mutex) do
         for actor in values(controller.state.active_actors)
-            stopActorGracefully(actor)
+            stop_actor_gracefully(actor)
         end
     end
     

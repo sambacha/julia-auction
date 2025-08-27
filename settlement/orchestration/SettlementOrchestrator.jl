@@ -19,7 +19,6 @@ auction results, CFMM execution, and state management to ensure atomic settlemen
 
 using ...Bridge: CFMMBridge
 using ...Execution: StateManager, AtomicTransaction
-
 struct OrchestratorConfig
     max_retry_attempts::Int
     settlement_timeout_ms::Int

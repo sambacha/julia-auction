@@ -1,11 +1,10 @@
 module LatencyMonitor
 
 using Base.Threads: Atomic, SpinLock
-using Statistics
 using Dates
-using TimerOutputs
 using Logging
-
+using Statistics
+using TimerOutputs
 export LatencyTracker, CircuitBreaker, AdaptiveBypass, LatencyMetrics, latency_tracker
 export record_latency!, check_circuit_breaker, should_bypass
 export get_latency_stats, reset_metrics, configure_thresholds

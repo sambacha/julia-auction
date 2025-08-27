@@ -8,16 +8,32 @@ with support for reserve prices, multiple units, and tie-breaking rules.
 Author: Julia Auction Team
 """
 
+using Dates
 using Random
 using Statistics
-using Dates
+# Define more specific statistics types for better performance
+abstract type StatisticsValue end
+struct NumericStat <: StatisticsValue
+    value::Union{Float64, Int64}
+end
+struct StringStat <: StatisticsValue
+    value::String
+end
+struct BoolStat <: StatisticsValue
+    value::Bool
+end
+struct VectorStat <: StatisticsValue
+    value::Union{Vector{Float64}, Vector{Int64}}
+end
+struct DateTimeStat <: StatisticsValue
+    value::DateTime
+end
+struct NullStat <: StatisticsValue end
 
-# Define StatisticsValue union type for auction statistics
-const StatisticsValue = Union{Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64}, DateTime, Nothing}
 const StatisticsDict = Dict{String, StatisticsValue}
 
-# Note: AbstractAuction, AbstractBidder, AbstractBiddingStrategy, Bid, and AuctionResult 
-# are defined in the main module
+# Include base types
+include("base_types.jl")
 
 #=============================================================================
     Auction Types

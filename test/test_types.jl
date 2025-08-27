@@ -1,6 +1,5 @@
 # Specialized tests for type system components
 using Test
-
 @testset "Extended Type System Tests" begin
     @testset "Type Hierarchy Tests" begin
         # Test abstract type hierarchy

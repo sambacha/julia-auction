@@ -3,9 +3,8 @@ module HealthCheck
 using Base.Threads: Atomic, SpinLock
 using Dates
 using Logging
-using Sys
 using Statistics
-
+using Sys
 export HealthChecker, HealthStatus, HealthCheckResult, ComponentHealth, HealthDetailValue
 export create_health_checker, add_health_check, run_health_checks
 export get_system_health, check_readiness, check_liveness

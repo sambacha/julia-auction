@@ -1,8 +1,7 @@
 module PriceImprovement
 
-using Statistics
 using LinearAlgebra
-
+using Statistics
 export PriceImprovementCalculator, ImprovementMetrics, ValueAttribution, price_improvement_calculator
 export calculate_improvement, validate_improvement_bounds, attribute_value
 export get_improvement_metrics, update_baseline, calculate_surplus

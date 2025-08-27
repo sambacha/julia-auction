@@ -3,7 +3,6 @@
 
 # Import MetadataValue and MetadataDict from abstract.jl
 using ..Actors: MetadataValue, MetadataDict
-
 # Define response types for channels
 const ResponseValue = Union{Bool, Int64, Float64, String, AuctionResult, Vector{Bid}, MetadataDict, Nothing}
 const ResponseChannel = Channel{ResponseValue}

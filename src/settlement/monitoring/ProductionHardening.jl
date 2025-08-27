@@ -16,10 +16,9 @@ Features:
 - Production-optimized configuration
 """
 
+using Base.Threads: Atomic
 using Logging
 using Statistics
-using Base.Threads: Atomic
-
 # Load all production hardening components
 include("CircuitBreaker.jl")
 include("ErrorHandler.jl")
@@ -32,7 +31,6 @@ using .ErrorHandler
 using .HealthCheck
 using .LatencyMonitor
 using .ProductionConfig
-
 # Re-export key types and functions
 export ProductionHardeningSystem, create_production_system
 export monitor_operation, execute_with_protection, get_system_status

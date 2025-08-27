@@ -3,7 +3,6 @@ module StateManager
 using Base.Threads: @spawn, Atomic, ReentrantLock
 using Dates
 using UUIDs
-
 # Define StateValue union type for type safety
 const StateValue = Union{Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64}, Set{UUID}, DateTime, UUID, Nothing}
 const StateDict = Dict{String, StateValue}

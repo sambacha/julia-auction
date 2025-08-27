@@ -28,13 +28,13 @@ mutable struct AuctionActor{T} <: AbstractActor{T}
         )
         
         # Start actor task
-        actor.task = @spawn runActorLoop(actor)
+        actor.task = @spawn run_actor_loop(actor)
         return actor
     end
 end
 
 # A/HC: create + AuctionActor
-function createAuctionActor(
+function create_auction_actor(
     auction_type::Symbol,
     params::Dict{Symbol, Any};
     event_log::Union{Nothing, CentralizedEventLog}=nothing
@@ -70,46 +70,46 @@ function createAuctionActor(
             state.end_time,
             params
         )
-        appendEventToLog(event_log, state.auction_id, event)
+        append_event_to_log(event_log, state.auction_id, event)
     end
     
     return actor
 end
 
 # A/HC/LC: run + Actor + Loop
-function runActorLoop(actor::AuctionActor)
+function run_actor_loop(actor::AuctionActor)
     while actor.running[]
         try
             msg = take!(actor.mailbox)  # Blocking receive
-            processActorMessage(actor, msg)
+            process_actor_message(actor, msg)
         catch e
             if !(e isa Base.InvalidStateException)
                 @error "Actor error" exception=e actor_id=actor.id
-                handleActorError(actor, e)
+                handle_actor_error(actor, e)
             end
         end
     end
 end
 
 # A/HC/LC: process + Actor + Message
-function processActorMessage(actor::AuctionActor, msg::ActorMessage)
+function process_actor_message(actor::AuctionActor, msg::ActorMessage)
     lock(actor.state.mutex) do
         if msg isa BidMessage
-            handleBidSubmission(actor, msg)
+            handle_bid_submission(actor, msg)
         elseif msg isa FinalizeMessage
-            handleAuctionFinalization(actor, msg)
+            handle_auction_finalization(actor, msg)
         elseif msg isa QueryMessage
-            handleStateQuery(actor, msg)
+            handle_state_query(actor, msg)
         elseif msg isa UpdateConfigMessage
-            handleConfigUpdate(actor, msg)
+            handle_config_update(actor, msg)
         elseif msg isa StateSnapshotMessage
-            handleSnapshotRequest(actor, msg)
+            handle_snapshot_request(actor, msg)
         end
     end
 end
 
 # A/HC/LC: handle + Bid + Submission
-function handleBidSubmission(actor::AuctionActor, msg::BidMessage)
+function handle_bid_submission(actor::AuctionActor, msg::BidMessage)
     state = actor.state
     
     # Validate auction status
@@ -122,7 +122,7 @@ function handleBidSubmission(actor::AuctionActor, msg::BidMessage)
                 "Auction not active (status: $(state.status))",
                 now()
             )
-            appendEventToLog(actor.event_log, state.auction_id, event)
+            append_event_to_log(actor.event_log, state.auction_id, event)
         end
         return BidResponse(false, uuid4(), "Auction not active", now())
     end
@@ -139,7 +139,7 @@ function handleBidSubmission(actor::AuctionActor, msg::BidMessage)
                 "Auction has ended",
                 now()
             )
-            appendEventToLog(actor.event_log, state.auction_id, event)
+            append_event_to_log(actor.event_log, state.auction_id, event)
         end
         return BidResponse(false, uuid4(), "Auction has ended", now())
     end
@@ -154,7 +154,7 @@ function handleBidSubmission(actor::AuctionActor, msg::BidMessage)
                 "Bid below reserve price",
                 now()
             )
-            appendEventToLog(actor.event_log, state.auction_id, event)
+            append_event_to_log(actor.event_log, state.auction_id, event)
         end
         return BidResponse(false, uuid4(), "Bid below reserve price", now())
     end
@@ -174,19 +174,19 @@ function handleBidSubmission(actor::AuctionActor, msg::BidMessage)
             msg.timestamp,
             msg.metadata
         )
-        appendEventToLog(actor.event_log, state.auction_id, event)
+        append_event_to_log(actor.event_log, state.auction_id, event)
     end
     
     # Check if immediate clearing needed (e.g., Dutch auction)
-    if shouldClearImmediately(state)
-        triggerAuctionClearing(actor)
+    if should_clear_immediately(state)
+        trigger_auction_clearing(actor)
     end
     
     return BidResponse(true, bid.id, "Bid accepted", now())
 end
 
 # A/HC/LC: handle + Auction + Finalization
-function handleAuctionFinalization(actor::AuctionActor, msg::FinalizeMessage)
+function handle_auction_finalization(actor::AuctionActor, msg::FinalizeMessage)
     state = actor.state
     
     if state.status == :completed
@@ -196,7 +196,7 @@ function handleAuctionFinalization(actor::AuctionActor, msg::FinalizeMessage)
     state.status = :finalizing
     
     # Finalize based on auction type
-    result = finalizeAuctionByType(state)
+    result = finalize_auction_by_type(state)
     state.result = result
     state.status = :completed
     
@@ -211,14 +211,14 @@ function handleAuctionFinalization(actor::AuctionActor, msg::FinalizeMessage)
             result.payments,
             now()
         )
-        appendEventToLog(actor.event_log, state.auction_id, event)
+        append_event_to_log(actor.event_log, state.auction_id, event)
     end
     
     return result
 end
 
 # A/HC/LC: should + Clear + Immediately
-function shouldClearImmediately(state::AuctionState)::Bool
+function should_clear_immediately(state::AuctionState)::Bool
     # Dutch auction clears when sufficient demand at current price
     if state.auction_type == :dutch
         total_quantity = sum(bid.quantity for bid in state.current_bids)
@@ -228,13 +228,13 @@ function shouldClearImmediately(state::AuctionState)::Bool
 end
 
 # A/HC/LC: trigger + Auction + Clearing
-function triggerAuctionClearing(actor::AuctionActor)
+function trigger_auction_clearing(actor::AuctionActor)
     msg = FinalizeMessage(false, now())
     put!(actor.mailbox, msg)
 end
 
 # A/HC/LC: finalize + Auction + ByType
-function finalizeAuctionByType(state::AuctionState{T}) where T
+function finalize_auction_by_type(state::AuctionState{T}) where T
     if state.auction_type == :first_price
         return finalizeFirstPriceAuction(state)
     elseif state.auction_type == :second_price || state.auction_type == :vickrey
@@ -249,19 +249,19 @@ function finalizeAuctionByType(state::AuctionState{T}) where T
 end
 
 # A/HC/LC: send + Message + ToActor
-function sendMessageToActor(actor::AuctionActor, msg::ActorMessage)
+function send_message_to_actor(actor::AuctionActor, msg::ActorMessage)
     put!(actor.mailbox, msg)
 end
 
 # A/HC/LC: stop + Actor + Gracefully
-function stopActorGracefully(actor::AuctionActor)
+function stop_actor_gracefully(actor::AuctionActor)
     actor.running[] = false
     close(actor.mailbox)
     wait(actor.task)
 end
 
 # A/HC/LC: handle + Actor + Error
-function handleActorError(actor::AuctionActor, error::Exception)
+function handle_actor_error(actor::AuctionActor, error::Exception)
     @error "Actor error occurred" actor_id=actor.id error=error
     
     # Log error event if possible
@@ -273,7 +273,7 @@ function handleActorError(actor::AuctionActor, error::Exception)
                 "Error: $(error)",
                 now()
             )
-            appendEventToLog(actor.event_log, actor.state.auction_id, event)
+            append_event_to_log(actor.event_log, actor.state.auction_id, event)
         catch
             # Ignore logging errors
         end

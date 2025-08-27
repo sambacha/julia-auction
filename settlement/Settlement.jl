@@ -17,7 +17,6 @@ Each subtree represents an independent ownership boundary with minimal public AP
 # Usage
 ```julia
 using Settlement
-
 # Initialize settlement orchestrator
 orchestrator = SettlementOrchestrator(
     cfmm_bridge = CFMMBridge(router),
@@ -30,9 +29,8 @@ result = settle_auction(orchestrator, auction_result)
 """
 module Settlement
 
-using CFMMRouter
 using AuctionKit
-
+using CFMMRouter
 # Export main types
 export SettlementOrchestrator, CFMMBridge, StateManager
 export AtomicTransaction, SettlementResult, PriceImprovement
@@ -44,14 +42,10 @@ export calculate_price_improvement, monitor_latency
 # Module includes - organized by functional domain
 include("orchestration/Orchestration.jl")
 using .Orchestration
-
 include("bridge/Bridge.jl")
 using .Bridge
-
 include("execution/Execution.jl")
 using .Execution
-
 include("monitoring/Monitoring.jl")
 using .Monitoring
-
 end # module Settlement

@@ -10,9 +10,8 @@ dependencies, allowing for proper dependency injection in production vs test env
 module BidGenerator
 
 using Base: UUID
-using UUIDs: uuid4
 using Dates: DateTime, now
-
+using UUIDs: uuid4
 export AbstractBidGenerator, ProductionBidGenerator, NetworkBidProvider
 export generate_bid, configure_bid_source, ConnectionValue, RetryPolicyValue
 

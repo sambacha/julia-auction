@@ -9,7 +9,6 @@ module Alerts
 export AlertManager, Alert, create_alert, send_alert, get_alert_summary
 
 using Dates
-
 struct Alert
     level::Symbol  # :info, :warning, :critical
     message::String

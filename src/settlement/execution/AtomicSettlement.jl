@@ -3,15 +3,12 @@ module AtomicSettlement
 using Base.Threads: @spawn, Atomic, ReentrantLock
 using Dates
 using UUIDs
-
 # Import configuration manager
 include("../../config/ConfigManager.jl")
 using .ConfigManager: load_config, get_config, AuctionConfig
-
 # Import CFMMBridge for real execution
 using ..CFMMBridge
 using ..CFMMBridge: Bridge, get_route, execute_direct, get_baseline_price
-
 export AtomicExecutor, SettlementBatch, ExecutionPlan, ValidationResult, atomic_executor
 export prepare_batch, validate_batch, execute_atomic!, rollback_batch
 export create_execution_plan, verify_atomicity, get_batch_status

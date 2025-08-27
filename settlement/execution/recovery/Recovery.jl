@@ -9,9 +9,8 @@ module Recovery
 export RecoveryManager, checkpoint_state, restore_checkpoint
 export RecoveryStrategy, ExponentialBackoff, LinearBackoff
 
-using Dates
 using Base: UUID
-
+using Dates
 """
     RecoveryManager
 

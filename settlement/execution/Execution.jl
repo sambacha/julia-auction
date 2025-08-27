@@ -19,7 +19,6 @@ export create_transaction, validate_transaction, finalize_transaction!
 # Recovery submodule
 include("recovery/Recovery.jl")
 using .Recovery
-
 include("StateManager.jl")
 include("AtomicSettlement.jl")
 include("PriceImprovement.jl")

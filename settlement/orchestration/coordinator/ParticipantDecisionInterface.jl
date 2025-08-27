@@ -11,12 +11,10 @@ module ParticipantDecisionInterface
 
 using Base: UUID
 using Dates: DateTime, now
-
 # Import logging configuration
 include("../../../src/logging/LoggingConfig.jl")
 using .LoggingConfig
 using Logging: @info, @warn, @error, @debug
-
 export AbstractParticipantValidator, ProductionParticipantValidator
 export ValidationRequest, ValidationResult, ValidationConfig
 export validate_transaction, configure_validator

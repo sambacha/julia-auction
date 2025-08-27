@@ -4,7 +4,6 @@
 export AugmentedUniformPriceAuction, finalize_augmented_uniform_auction
 
 using ..AugmentedUniformPriceAuction: ElasticSupplySchedule, AugmentedTieBreaking
-
 """
     AugmentedUniformPriceAuction{T} <: SealedBidAuction{T}
 

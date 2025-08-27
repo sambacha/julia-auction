@@ -5,15 +5,13 @@ This module provides comprehensive simulation and benchmarking capabilities for 
 including performance profiling, scalability analysis, and efficiency metrics.
 """
 
-using Random
-using Statistics
 using BenchmarkTools
 using Dates
-
+using Random
+using Statistics
 # Import configuration manager
 include("config/ConfigManager.jl")
 using .ConfigManager: load_config, get_config, AuctionConfig as GlobalAuctionConfig
-
 # Define PerformanceValue union type for simulation metrics
 const PerformanceValue = Union{Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64}, DateTime, Nothing}
 const PerformanceDict = Dict{String, PerformanceValue}

@@ -3,7 +3,6 @@ module SettlementOrchestrator
 using Base.Threads: @spawn, Atomic, SpinLock
 using Dates
 using UUIDs
-
 export Orchestrator, SettlementRequest, SettlementResult, SettlementStatus
 export process_settlement!, get_status, cancel_settlement!
 

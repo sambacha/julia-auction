@@ -1,14 +1,13 @@
 module AuctionKit
 
-using UUIDs
-using Dates
-using SHA
+using Base.Threads: @spawn, Atomic
 using DataStructures
+using Dates
 using Graphs
 using HTTP
 using JSON3
-using Base.Threads: @spawn, Atomic
-
+using SHA
+using UUIDs
 # Export main types and functions
 export 
     # Abstract types
@@ -38,12 +37,12 @@ export
     BidResponse,
     
     # Core functions
-    createAuctionActor, sendMessageToActor, stopActorGracefully,
+    create_auction_actor, send_message_to_actor, stop_actor_gracefully,
     createAuctionDirect, submitDirectBid, finalizeAuctionDirect,
     startRPCServer, stopRPCServer, submitRPCBid,
     
     # Event log functions
-    appendEventToLog, queryEventsByAuction, queryEventsByType,
+    append_event_to_log, queryEventsByAuction, queryEventsByType,
     verifyLogIntegrity, replayEventsFromLog,
     
     # Mechanism functions

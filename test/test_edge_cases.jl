@@ -1,7 +1,6 @@
 # Edge case and boundary condition tests
-using Test
 using Random
-
+using Test
 @testset "Edge Cases and Boundary Conditions" begin
     @testset "Extreme Value Tests" begin
         @testset "Very Small Values" begin

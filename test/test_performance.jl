@@ -1,8 +1,7 @@
 # Performance and benchmarking tests
-using Test
 using BenchmarkTools
 using Random
-
+using Test
 @testset "Performance Tests" begin
     @testset "Scalability Tests" begin
         # Test performance with different scales

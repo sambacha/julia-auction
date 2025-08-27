@@ -15,7 +15,6 @@ Provides type-safe, environment-aware configuration loading with support for:
 
 ```julia
 using ConfigManager
-
 # Load configuration based on environment
 config = load_config()  # Uses JULIA_AUCTION_ENV or defaults to "development"
 
@@ -40,9 +39,8 @@ Examples:
 """
 module ConfigManager
 
-using TOML
 using Logging
-
+using TOML
 export AuctionConfig, ConfigValue, ConfigError
 export load_config, reload_config, get_config, set_config!
 export validate_config, get_environment, get_config_path

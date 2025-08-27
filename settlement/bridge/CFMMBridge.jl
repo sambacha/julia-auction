@@ -11,11 +11,10 @@ Handles protocol translation, route preparation, and execution.
 - Manage slippage and price impact
 """
 
-using CFMMRouter
 using ...Execution: AtomicTransaction
-using .Optimization: RouteOptimizer, optimize_routes
 using .Adapters: ProtocolAdapter, get_adapter
-
+using .Optimization: RouteOptimizer, optimize_routes
+using CFMMRouter
 struct CFMMConfig
     max_slippage_bps::Float64
     max_price_impact_bps::Float64

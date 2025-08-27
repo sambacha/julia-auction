@@ -23,27 +23,23 @@ multiple counterparties, cross-chain operations, and distributed consensus.
 """
 module Coordinator
 
-using Base: UUID
-using UUIDs: uuid4
 using Base.Threads: Atomic, atomic_cas!, atomic_add!, ReentrantLock
+using Base: UUID
 using Dates: DateTime, now, value
-
+using UUIDs: uuid4
 # Import configuration manager
 include("../../../src/config/ConfigManager.jl")
 using .ConfigManager: load_config, get_config, AuctionConfig
-
 # Import logging configuration  
 include("../../../src/logging/LoggingConfig.jl")
 using .LoggingConfig: configure_logging!, set_correlation_id!, get_correlation_id
 using Logging: @info, @warn, @error, @debug
-
 # Import production participant validation interface
 include("ParticipantDecisionInterface.jl")
 using .ParticipantDecisionInterface: AbstractParticipantValidator,
                                         ProductionParticipantValidator
 using .ParticipantDecisionInterface: ValidationRequest, ValidationResult, ValidationConfig
 using .ParticipantDecisionInterface: validate_transaction, configure_validator
-
 export Participant, Vote, ConsensusProtocol, CoordinationContext
 export coordinate_settlement, collect_votes, check_consensus
 export monitor_health, handle_failure, atomic_state_update

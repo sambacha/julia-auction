@@ -1,6 +1,5 @@
-using Test
 using Logging
-
+using Test
 # Load production hardening modules
 include("../src/settlement/monitoring/CircuitBreaker.jl")
 include("../src/settlement/monitoring/ErrorHandler.jl")
@@ -11,9 +10,8 @@ include("../src/settlement/monitoring/latency/LatencyMonitor.jl")
 using .CircuitBreaker
 using .ErrorHandler
 using .HealthCheck
-using .ProductionConfig
 using .LatencyMonitor
-
+using .ProductionConfig
 @testset "Production Hardening System Tests" begin
     
     @testset "CircuitBreaker Tests" begin

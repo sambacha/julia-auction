@@ -13,18 +13,15 @@ optimizations.
 module Bridge
 
 using CFMMRouter
-
 export CFMMBridge, RouteOptimizer
 export prepare_routes, execute_transaction, estimate_impact
 
 # Protocol adapters submodule
 include("adapters/Adapters.jl")
 using .Adapters
-
 # Route optimization submodule
 include("optimization/Optimization.jl")
 using .Optimization
-
 include("CFMMBridge.jl")
 
 end # module Bridge

@@ -14,7 +14,6 @@ checkpointing, validation, and recovery mechanisms.
 using .Recovery: RecoveryManager, checkpoint_state, restore_checkpoint
 using Base: UUID
 using Dates
-
 # Define StateValue union type for type safety
 const StateValue = Union{
     Float64, Int64, String, Bool, Vector{Float64}, Vector{Int64},

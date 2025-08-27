@@ -26,7 +26,7 @@ end
 
 
 # A/HC/LC: append + Event + ToLog
-function appendEventToLog(log::CentralizedEventLog, auction_id::UUID, event::AuctionEvent)::UUID
+function append_event_to_log(log::CentralizedEventLog, auction_id::UUID, event::AuctionEvent)::UUID
     lock(log.lock) do
         # Get previous hash
         previous_hash = isempty(log.events) ? UInt8[] : log.events[end].event_hash

@@ -3,11 +3,9 @@ module CircuitBreaker
 using Base.Threads: Atomic, SpinLock
 using Dates
 using Logging
-
 # Import configuration manager
 include("../../config/ConfigManager.jl")
 using .ConfigManager: load_config, get_config, AuctionConfig
-
 export ProductionCircuitBreaker, CircuitBreakerConfig, CircuitState, ConfigValue
 export create_circuit_breaker, execute_with_circuit_breaker, get_circuit_state
 export reset_circuit_breaker, configure_circuit_breaker, get_circuit_metrics

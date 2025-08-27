@@ -8,14 +8,12 @@ This module contains test/simulation code that was removed from production modul
 """
 module SimulatedBidGenerator
 
-using Random
 using Dates: DateTime, now
+using Random
 using SHA: sha256
-
 # Import the production types we need to simulate
 include("../../src/settlement/execution/auction/BidGenerator.jl")
 using .BidGenerator: AbstractBidGenerator, ImprovementBidRequest
-
 export SimulatedGenerator, ImprovementBid, generate_simulated_bid
 
 """

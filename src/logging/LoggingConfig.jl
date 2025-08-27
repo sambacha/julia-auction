@@ -10,11 +10,10 @@ This module provides structured, production-ready logging with:
 
 module LoggingConfig
 
-using Logging
-using JSON
-using UUIDs
 using Dates
-
+using JSON
+using Logging
+using UUIDs
 export configure_logging!, create_logger, LogLevel, CorrelationContext
 export @log_with_correlation, generate_correlation_id, set_correlation_id!
 export create_json_formatter, create_console_formatter
