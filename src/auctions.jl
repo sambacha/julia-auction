@@ -8,32 +8,8 @@ with support for reserve prices, multiple units, and tie-breaking rules.
 Author: Julia Auction Team
 """
 
-using Dates
-using Random
-using Statistics
-# Define more specific statistics types for better performance
-abstract type StatisticsValue end
-struct NumericStat <: StatisticsValue
-    value::Union{Float64, Int64}
-end
-struct StringStat <: StatisticsValue
-    value::String
-end
-struct BoolStat <: StatisticsValue
-    value::Bool
-end
-struct VectorStat <: StatisticsValue
-    value::Union{Vector{Float64}, Vector{Int64}}
-end
-struct DateTimeStat <: StatisticsValue
-    value::DateTime
-end
-struct NullStat <: StatisticsValue end
-
-const StatisticsDict = Dict{String, StatisticsValue}
-
-# Include base types
-include("base_types.jl")
+# Note: StatisticsValue types are already defined in AuctionSimulator.jl
+# We don't need to redefine them here
 
 #=============================================================================
     Auction Types
@@ -211,11 +187,11 @@ function conduct_auction(auction::AbstractAuction, bidders::Vector{<:AbstractBid
     
     # Create result
     statistics = StatisticsDict(
-        "num_bidders" => length(bidders),
-        "num_valid_bids" => length(bids),
-        "highest_bid" => isempty(bids) ? 0.0 : maximum(b.value for b in bids),
-        "revenue" => payment,
-        "efficiency" => calculate_efficiency(winner_info, bidders, auction)
+        "num_bidders" => NumericStat(length(bidders)),
+        "num_valid_bids" => NumericStat(length(bids)),
+        "highest_bid" => NumericStat(isempty(bids) ? 0.0 : maximum(b.value for b in bids)),
+        "revenue" => NumericStat(payment),
+        "efficiency" => NumericStat(calculate_efficiency(winner_info, bidders, auction))
     )
     
     return AuctionResult(

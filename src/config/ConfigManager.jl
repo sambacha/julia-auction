@@ -95,52 +95,84 @@ Applies environment variable overrides after loading base configuration.
 function load_config(environment::Union{String, Nothing}=nothing, 
                     config_dir::Union{String, Nothing}=nothing)::AuctionConfig
     
-    # Determine environment
+    # Determine environment and config path
     env = environment !== nothing ? environment : get_environment()
-    
-    # Determine config directory
     config_path = config_dir !== nothing ? config_dir : get_config_path()
     
     @info "Loading auction configuration" environment=env config_path=config_path
     
     try
-        # Load default configuration first
-        default_file = joinpath(config_path, "default.toml")
-        if !isfile(default_file)
-            throw(ConfigError("Default configuration file not found", default_file, nothing))
-        end
-        
-        config_data = TOML.parsefile(default_file)
-        @debug "Loaded default configuration" file=default_file sections=keys(config_data)
-        
-        # Load environment-specific overrides if they exist
-        env_file = joinpath(config_path, "$(env).toml")
-        if isfile(env_file)
-            env_data = TOML.parsefile(env_file)
-            config_data = merge_configs(config_data, env_data)
-            @debug "Applied environment overrides" file=env_file sections=keys(env_data)
-        else
-            @debug "No environment-specific config found" file=env_file
-        end
+        # Load and merge configuration files
+        config_data = _load_config_files(config_path, env)
         
         # Apply environment variable overrides
         config_data = apply_environment_overrides(config_data)
         
-        # Create configuration object
-        config = AuctionConfig(config_data, env, config_path)
-        
-        # Validate configuration
-        validate_config(config)
+        # Create and validate configuration
+        config = _create_and_validate_config(config_data, env, config_path)
         
         @info "Configuration loaded successfully" environment=env sections=length(config.data)
         return config
         
     catch e
-        if isa(e, ConfigError)
-            rethrow(e)
-        else
-            throw(ConfigError("Failed to load configuration: $e", nothing, e))
-        end
+        _handle_config_load_error(e)
+    end
+end
+
+function _load_config_files(config_path::String, env::String)::Dict{String, Any}
+    # Load default configuration first
+    default_file = joinpath(config_path, "default.toml")
+    config_data = _load_default_config(default_file)
+    
+    # Load environment-specific overrides if they exist
+    config_data = _apply_environment_overrides(config_data, config_path, env)
+    
+    return config_data
+end
+
+function _load_default_config(default_file::String)::Dict{String, Any}
+    if !isfile(default_file)
+        throw(ConfigError("Default configuration file not found", default_file, nothing))
+    end
+    
+    config_data = TOML.parsefile(default_file)
+    @debug "Loaded default configuration" file=default_file sections=keys(config_data)
+    
+    return config_data
+end
+
+function _apply_environment_overrides(
+    config_data::Dict{String, Any}, 
+    config_path::String, 
+    env::String
+)::Dict{String, Any}
+    env_file = joinpath(config_path, "$(env).toml")
+    if isfile(env_file)
+        env_data = TOML.parsefile(env_file)
+        config_data = merge_configs(config_data, env_data)
+        @debug "Applied environment overrides" file=env_file sections=keys(env_data)
+    else
+        @debug "No environment-specific config found" file=env_file
+    end
+    
+    return config_data
+end
+
+function _create_and_validate_config(
+    config_data::Dict{String, Any}, 
+    env::String, 
+    config_path::String
+)::AuctionConfig
+    config = AuctionConfig(config_data, env, config_path)
+    validate_config(config)
+    return config
+end
+
+function _handle_config_load_error(e::Exception)
+    if isa(e, ConfigError)
+        rethrow(e)
+    else
+        throw(ConfigError("Failed to load configuration: $e", nothing, e))
     end
 end
 
@@ -486,56 +518,88 @@ function apply_environment_overrides(config_data::Dict{String, Any})::Dict{Strin
     override_count = 0
     
     for (env_key, env_value) in ENV
-        if startswith(env_key, "AUCTION_")
-            # Parse environment key: AUCTION_SECTION_KEY -> section.key
-            remaining_key = env_key[9:end]  # Remove "AUCTION_" prefix
-            
-            # Special handling for known multi-word sections
-            config_key = nothing
-            key_parts = nothing
-            
-            if startswith(remaining_key, "PHANTOM_AUCTION_")
-                # AUCTION_PHANTOM_AUCTION_* -> phantom_auction.*
-                final_key = lowercase(remaining_key[17:end])  # Remove "PHANTOM_AUCTION_"
-                config_key = "phantom_auction.$final_key"
-                key_parts = ["phantom_auction", final_key]
-            elseif startswith(remaining_key, "CIRCUIT_BREAKER_")
-                # AUCTION_CIRCUIT_BREAKER_* -> circuit_breaker.*
-                final_key = lowercase(remaining_key[17:end])  # Remove "CIRCUIT_BREAKER_"
-                config_key = "circuit_breaker.$final_key"
-                key_parts = ["circuit_breaker", final_key]
-            elseif startswith(remaining_key, "AUCTION_MECHANICS_")
-                # AUCTION_AUCTION_MECHANICS_* -> auction_mechanics.*
-                final_key = lowercase(remaining_key[19:end])  # Remove "AUCTION_MECHANICS_"
-                config_key = "auction_mechanics.$final_key"
-                key_parts = ["auction_mechanics", final_key]
-            else
-                # Default parsing: split by underscore
-                parts = split(remaining_key, '_')
-                if length(parts) >= 2
-                    config_key = join(map(lowercase, parts), '.')
-                    key_parts = map(lowercase, parts)
-                end
-            end
-            
+        if _should_process_env_var(env_key)
+            key_parts = _parse_environment_key(env_key)
             if key_parts !== nothing
-                # Parse value with type inference
-                parsed_value = parse_env_value(env_value)
-                
-                # Set nested value
-                set_nested_value!(result, key_parts, parsed_value)
-                
-                @debug "Applied environment override" env_key=env_key config_key=config_key value=parsed_value
-                override_count += 1
+                override_count = _apply_single_override(
+                    result, 
+                    env_key, 
+                    env_value, 
+                    key_parts, 
+                    override_count
+                )
             end
         end
     end
     
+    _log_override_summary(override_count)
+    return result
+end
+
+function _should_process_env_var(env_key::String)::Bool
+    return startswith(env_key, "AUCTION_")
+end
+
+function _parse_environment_key(env_key::String)::Union{Vector{String}, Nothing}
+    remaining_key = env_key[9:end]  # Remove "AUCTION_" prefix
+    
+    # Check for special multi-word sections first
+    key_parts = _parse_special_sections(remaining_key)
+    if key_parts !== nothing
+        return key_parts
+    end
+    
+    # Default parsing: split by underscore
+    return _parse_default_key(remaining_key)
+end
+
+function _parse_special_sections(remaining_key::String)::Union{Vector{String}, Nothing}
+    special_sections = [
+        ("PHANTOM_AUCTION_", "phantom_auction", 17),
+        ("CIRCUIT_BREAKER_", "circuit_breaker", 17),
+        ("AUCTION_MECHANICS_", "auction_mechanics", 19)
+    ]
+    
+    for (prefix, section, prefix_length) in special_sections
+        if startswith(remaining_key, prefix)
+            final_key = lowercase(remaining_key[prefix_length:end])
+            return [section, final_key]
+        end
+    end
+    
+    return nothing
+end
+
+function _parse_default_key(remaining_key::String)::Union{Vector{String}, Nothing}
+    parts = split(remaining_key, '_')
+    if length(parts) >= 2
+        return map(lowercase, parts)
+    end
+    return nothing
+end
+
+function _apply_single_override(
+    result::Dict{String, Any}, 
+    env_key::String, 
+    env_value::String, 
+    key_parts::Vector{String}, 
+    override_count::Int
+)::Int
+    # Parse value with type inference
+    parsed_value = parse_env_value(env_value)
+    
+    # Set nested value
+    set_nested_value!(result, key_parts, parsed_value)
+    
+    @debug "Applied environment override" env_key=env_key config_key=join(key_parts, ".") value=parsed_value
+    
+    return override_count + 1
+end
+
+function _log_override_summary(override_count::Int)
     if override_count > 0
         @info "Applied environment variable overrides" count=override_count
     end
-    
-    return result
 end
 
 """

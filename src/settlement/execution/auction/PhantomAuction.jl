@@ -12,9 +12,9 @@ using .ConfigManager: load_config, get_config, AuctionConfig
 include("BidGenerator.jl")
 using .BidGenerator: AbstractBidGenerator, ProductionBidGenerator, BidGeneratorConfig
 using .BidGenerator: generate_bid, configure_bid_source, ImprovementBidRequest
-export Auction, ImprovementBid, AuctionResult
+export Auction, ImprovementBid, BlockspaceImprovementBid, AuctionResult, BlockspaceAuctionResult
 export run_auction, submit_bid, reveal_bid, finalize_auction
-export configure_auction_bid_source
+export configure_auction_bid_source, run_blockspace_auction, submit_blockspace_bid
 
 # Improvement bid structure
 struct ImprovementBid{T}
@@ -28,6 +28,22 @@ struct ImprovementBid{T}
     timestamp::DateTime
 end
 
+# Blockspace improvement bid structure - extends ImprovementBid for slot auctions
+struct BlockspaceImprovementBid{T} <: Any
+    bidder_id::String
+    validator_pubkey::String
+    slot_number::Int64
+    epoch::Int64
+    improved_block_value::T
+    mev_component::T
+    gas_limit::Int64
+    priority_fee::T
+    commitment_hash::Vector{UInt8}
+    nonce::Int64
+    timestamp::DateTime
+    bundle_hash::Vector{UInt8}
+end
+
 # Auction result
 struct AuctionResult{T}
     winning_bid::Union{ImprovementBid{T}, Nothing}
@@ -36,6 +52,18 @@ struct AuctionResult{T}
     improvement_bps::Float64
     num_participants::Int64
     auction_duration_ms::Float64
+end
+
+# Blockspace auction result
+struct BlockspaceAuctionResult{T}
+    winning_bid::Union{BlockspaceImprovementBid{T}, Nothing}
+    improved_block_value::T
+    mev_value::T
+    gas_limit::Int64
+    improvement_bps::Float64
+    num_participants::Int64
+    auction_duration_ms::Float64
+    slot_number::Int64
 end
 
 # Phantom auction configuration
@@ -356,6 +384,137 @@ function configure_auction_bid_source(auction::Auction,
     else
         println("WARNING: Auction is not using ProductionBidGenerator - bid source configuration ignored")
     end
+end
+
+# Blockspace-specific auction functions
+
+# Run blockspace phantom auction for slot improvement
+function run_blockspace_auction(slot_number::Int64, baseline_block_value::T, baseline_mev::T, 
+                                gas_limit::Int64, deadline::DateTime;
+                                global_config::AuctionConfig = load_config()) where T
+    
+    config = PhantomAuctionConfig(
+        get_config(global_config, "blockspace.phantom_duration_ms", Int64, 500),
+        get_config(global_config, "blockspace.min_improvement_bps", Float64, 10.0),
+        get_config(global_config, "blockspace.max_improvement_bps", Float64, 500.0),
+        get_config(global_config, "blockspace.reveal_delay_ms", Int64, 100),
+        get_config(global_config, "blockspace.min_participants", Int64, 2)
+    )
+    
+    # Track blockspace bids separately
+    blockspace_bids = BlockspaceImprovementBid{T}[]
+    start_time = time_ns()
+    
+    # Simulate fast bidding phase (in production, would receive network bids)
+    # This is a simplified implementation
+    
+    # Wait for bids or timeout
+    while (time_ns() - start_time) / 1_000_000 < config.duration_ms
+        # In production, would receive bids from network
+        sleep(0.001)  # 1ms sleep
+    end
+    
+    # Select winner based on improved block value
+    if isempty(blockspace_bids)
+        return BlockspaceAuctionResult(
+            nothing,
+            baseline_block_value,
+            baseline_mev,
+            gas_limit,
+            0.0,
+            0,
+            Float64((time_ns() - start_time) / 1_000_000),
+            slot_number
+        )
+    end
+    
+    # Sort by improved block value
+    sort!(blockspace_bids, by=b->b.improved_block_value, rev=true)
+    winning_bid = blockspace_bids[1]
+    
+    improvement_bps = ((winning_bid.improved_block_value - baseline_block_value) / baseline_block_value) * 10000
+    
+    return BlockspaceAuctionResult(
+        winning_bid,
+        winning_bid.improved_block_value,
+        winning_bid.mev_component,
+        winning_bid.gas_limit,
+        improvement_bps,
+        length(blockspace_bids),
+        Float64((time_ns() - start_time) / 1_000_000),
+        slot_number
+    )
+end
+
+# Submit blockspace improvement bid
+function submit_blockspace_bid(slot_number::Int64, bid::BlockspaceImprovementBid{T}) where T
+    # In production, this would validate and store the bid
+    # For now, simplified validation
+    
+    if bid.slot_number != slot_number
+        @warn "Slot number mismatch" bid_slot=bid.slot_number expected=slot_number
+        return false
+    end
+    
+    if bid.improved_block_value <= zero(T)
+        @warn "Invalid block value" value=bid.improved_block_value
+        return false
+    end
+    
+    if bid.gas_limit <= 0 || bid.gas_limit > 30_000_000
+        @warn "Invalid gas limit" gas=bid.gas_limit
+        return false
+    end
+    
+    # Verify commitment hash
+    data = string(bid.bidder_id, bid.slot_number, bid.improved_block_value, bid.nonce)
+    expected_hash = sha256(data)
+    
+    if bid.commitment_hash != expected_hash
+        @warn "Invalid commitment hash"
+        return false
+    end
+    
+    @info "Blockspace bid submitted" slot=slot_number bidder=bid.bidder_id value=bid.improved_block_value
+    
+    return true
+end
+
+# Create blockspace commitment hash
+function create_blockspace_commitment(bid::BlockspaceImprovementBid{T}) where T
+    data = string(
+        bid.bidder_id,
+        bid.slot_number,
+        bid.improved_block_value,
+        bid.mev_component,
+        bid.nonce
+    )
+    return sha256(data)
+end
+
+# Validate blockspace bid parameters
+function validate_blockspace_bid(bid::BlockspaceImprovementBid{T}, min_value::T, max_gas::Int64) where T
+    # Check block value is positive and reasonable
+    if bid.improved_block_value <= zero(T) || bid.improved_block_value > T(1000)  # Max 1000 ETH
+        return false
+    end
+    
+    # Check MEV component is non-negative
+    if bid.mev_component < zero(T)
+        return false
+    end
+    
+    # Check gas limit
+    if bid.gas_limit <= 0 || bid.gas_limit > max_gas
+        return false
+    end
+    
+    # Check priority fee is reasonable
+    if bid.priority_fee < zero(T) || bid.priority_fee > bid.improved_block_value * T(0.1)  # Max 10% priority
+        return false
+    end
+    
+    return true
 end
 
 end # module

@@ -144,7 +144,11 @@ struct Bidder{S <: AbstractBiddingStrategy} <: AbstractBidder
     valuation::Float64
     strategy::S
     
-    function Bidder(id::Int, valuation::Float64, strategy::S) where {S <: AbstractBiddingStrategy}
+    function Bidder(
+        id::Int,
+        valuation::Float64,
+        strategy::S
+    ) where {S <: AbstractBiddingStrategy}
         if id <= 0
             throw(ArgumentError("Bidder ID must be positive"))
         end
@@ -332,7 +336,8 @@ get_statistics(result::AuctionResult) = result.statistics
 Custom display format for Bidder objects.
 """
 function Base.show(io::IO, bidder::Bidder)
-    print(io, "Bidder(id=$(bidder.id), valuation=$(bidder.valuation), strategy=$(typeof(bidder.strategy)))")
+    print(io, "Bidder(id=$(bidder.id), valuation=$(bidder.valuation), " *
+              "strategy=$(typeof(bidder.strategy)))")
 end
 
 """
@@ -341,7 +346,8 @@ end
 Custom display format for Bid objects.
 """
 function Base.show(io::IO, bid::Bid)
-    print(io, "Bid(bidder_id=$(bid.bidder_id), value=$(bid.value), timestamp=$(bid.timestamp))")
+    print(io, "Bid(bidder_id=$(bid.bidder_id), value=$(bid.value), " *
+              "timestamp=$(bid.timestamp))")
 end
 
 """
@@ -351,7 +357,9 @@ Custom display format for AuctionResult objects.
 """
 function Base.show(io::IO, result::AuctionResult)
     winner_str = result.winner_id === nothing ? "None" : string(result.winner_id)
-    print(io, "AuctionResult(winner_id=$(winner_str), winning_price=$(result.winning_price), num_bids=$(length(result.all_bids)))")
+    print(io, "AuctionResult(winner_id=$(winner_str), " *
+              "winning_price=$(result.winning_price), " *
+              "num_bids=$(length(result.all_bids)))")
 end
 
 """
@@ -440,5 +448,10 @@ end
 # Include other modules
 include("auctions.jl")          # Auction mechanisms and bidding strategies
 include("simulation.jl")        # Simulation engine and benchmarking
+include("visualization/AuctionVisualizer.jl")  # Visualization tools
+
+# Re-export visualization module
+using .AuctionVisualizer
+export AuctionVisualizer
 
 end # module AuctionSimulator

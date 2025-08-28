@@ -51,19 +51,52 @@ struct AuctionConfig
         global_config::GlobalAuctionConfig = load_config()
     )
         # Use provided values or load from global config
-        final_num_rounds = num_rounds !== nothing ? num_rounds : get_config(global_config, "simulation.default_num_rounds", Int)
-        final_num_items = num_items !== nothing ? num_items : get_config(global_config, "simulation.default_num_items", Int)
-        final_min_value = min_value !== nothing ? min_value : get_config(global_config, "simulation.min_valuation", Float64)
-        final_max_value = max_value !== nothing ? max_value : get_config(global_config, "simulation.max_valuation", Float64)
-        final_reserve_price = reserve_price !== nothing ? reserve_price : get_config(global_config, "simulation.default_reserve_price", Float64)
+        final_num_rounds = if num_rounds !== nothing
+            num_rounds
+        else
+            get_config(global_config, "simulation.default_num_rounds", Int)
+        end
+        
+        final_num_items = if num_items !== nothing
+            num_items
+        else
+            get_config(global_config, "simulation.default_num_items", Int)
+        end
+        
+        final_min_value = if min_value !== nothing
+            min_value
+        else
+            get_config(global_config, "simulation.min_valuation", Float64)
+        end
+        
+        final_max_value = if max_value !== nothing
+            max_value
+        else
+            get_config(global_config, "simulation.max_valuation", Float64)
+        end
+        
+        final_reserve_price = if reserve_price !== nothing
+            reserve_price
+        else
+            get_config(global_config, "simulation.default_reserve_price", Float64)
+        end
         
         @assert final_num_rounds > 0 "Number of rounds must be positive"
         @assert final_num_items > 0 "Number of items must be positive"
         @assert final_min_value >= 0 "Minimum value must be non-negative"
-        @assert final_max_value > final_min_value "Maximum value must be greater than minimum value"
+        @assert final_max_value > final_min_value "Maximum value must be " *
+                                                 "greater than minimum value"
         @assert final_reserve_price >= 0 "Reserve price must be non-negative"
         
-        new(final_num_rounds, final_num_items, final_min_value, final_max_value, final_reserve_price, seed, parallel)
+        new(
+            final_num_rounds,
+            final_num_items,
+            final_min_value,
+            final_max_value,
+            final_reserve_price,
+            seed,
+            parallel
+        )
     end
 end
 
@@ -198,30 +231,24 @@ function run_simulation(auction_type, bidders, config::AuctionConfig)
         # Create auction instance
         auction = auction_type
         
-        # Generate random valuations for this round
-        valuations = rand(config.min_value:0.01:config.max_value, length(bidders))
-        
-        # Collect bids from all bidders
-        bids = []
-        for (i, bidder) in enumerate(bidders)
-            bid = make_bid(bidder, valuations[i], auction)
-            push!(bids, (bid, i, valuations[i]))
-        end
+        # For simulation, we use the provided bidders directly
+        # They already have their strategies set
         
         # Run auction
-        result = conduct_auction(auction, bids, config.reserve_price)
+        result = conduct_auction(auction, bidders)
         
-        # Record results
-        push!(revenues, result.revenue)
-        push!(winning_bids, result.winning_bid)
+        # Record results - extract from statistics
+        revenue = result.statistics["revenue"].value
+        push!(revenues, revenue)
+        push!(winning_bids, result.winning_price)
         
         # Update winner count
-        if result.winner_id > 0
+        if result.winner_id !== nothing && result.winner_id > 0
             bidder_wins[result.winner_id] += 1
         end
         
-        # Calculate efficiency for this round
-        efficiency = calculate_round_efficiency(result, bids)
+        # Calculate efficiency for this round - use from statistics
+        efficiency = result.statistics["efficiency"].value
         push!(efficiencies, efficiency)
     end
     

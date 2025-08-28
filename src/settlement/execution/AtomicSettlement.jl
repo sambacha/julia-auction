@@ -12,6 +12,31 @@ using ..CFMMBridge: Bridge, get_route, execute_direct, get_baseline_price
 export AtomicExecutor, SettlementBatch, ExecutionPlan, ValidationResult, atomic_executor
 export prepare_batch, validate_batch, execute_atomic!, rollback_batch
 export create_execution_plan, verify_atomicity, get_batch_status
+export SettlementError, ValidationError, ExecutionError, TimeoutError
+
+# Error type hierarchy
+abstract type SettlementError <: Exception end
+
+struct ValidationError <: SettlementError
+    message::String
+    batch_id::UUID
+    details::Dict{String, Any}
+end
+
+struct ExecutionError <: SettlementError
+    message::String
+    batch_id::UUID
+    step::Int
+    cause::Union{Exception, Nothing}
+end
+
+struct TimeoutError <: SettlementError
+    message::String
+    batch_id::UUID
+    phase::Symbol  # :prepare or :commit
+    elapsed_ms::Float64
+    limit_ms::Float64
+end
 
 # Single settlement in a batch
 struct Settlement
@@ -25,6 +50,45 @@ struct Settlement
     price::Float64
     gas_estimate::Int
     deadline::DateTime
+    
+    function Settlement(
+        id::UUID,
+        user_address::String,
+        token_in::Int,
+        token_out::Int,
+        amount_in::Float64,
+        amount_out::Float64,
+        execution_path::Vector{Int},
+        price::Float64,
+        gas_estimate::Int,
+        deadline::DateTime
+    )
+        # Validate parameters
+        if isempty(user_address)
+            throw(ArgumentError("user_address cannot be empty"))
+        end
+        if token_in < 0 || token_out < 0
+            throw(ArgumentError("token IDs must be non-negative"))
+        end
+        if token_in == token_out
+            throw(ArgumentError("token_in and token_out must be different"))
+        end
+        if amount_in <= 0 || amount_out <= 0
+            throw(ArgumentError("amounts must be positive"))
+        end
+        if price <= 0
+            throw(ArgumentError("price must be positive"))
+        end
+        if gas_estimate <= 0
+            throw(ArgumentError("gas_estimate must be positive"))
+        end
+        if deadline < now()
+            throw(ArgumentError("deadline must be in the future"))
+        end
+        
+        new(id, user_address, token_in, token_out, amount_in, amount_out, 
+            execution_path, price, gas_estimate, deadline)
+    end
 end
 
 # Batch of settlements for atomic execution
@@ -87,10 +151,24 @@ function atomic_executor(;
     
     # Use provided values or load from config
     final_max_batch_size = max_batch_size !== nothing ? max_batch_size : get_config(config, "settlement.max_batch_size", Int, 50)
-    final_max_retries = max_retries !== nothing ? max_retries : get_config(config, "settlement.max_retries", Int)
+    final_max_retries = max_retries !== nothing ? max_retries : get_config(config, "settlement.max_retries", Int, 3)
     final_prepare_timeout_ms = prepare_timeout_ms !== nothing ? prepare_timeout_ms : get_config(config, "timeouts.settlement_prepare_timeout_ms", Float64, 100.0)
     final_commit_timeout_ms = commit_timeout_ms !== nothing ? commit_timeout_ms : get_config(config, "timeouts.settlement_commit_timeout_ms", Float64, 500.0)
     final_fallback_enabled = fallback_enabled !== nothing ? fallback_enabled : get_config(config, "settlement.fallback_enabled", Bool, true)
+    
+    # Validate parameters
+    if final_max_batch_size <= 0
+        throw(ArgumentError("max_batch_size must be positive, got $final_max_batch_size"))
+    end
+    if final_max_retries < 0
+        throw(ArgumentError("max_retries must be non-negative, got $final_max_retries"))
+    end
+    if final_prepare_timeout_ms <= 0
+        throw(ArgumentError("prepare_timeout_ms must be positive, got $final_prepare_timeout_ms"))
+    end
+    if final_commit_timeout_ms <= 0
+        throw(ArgumentError("commit_timeout_ms must be positive, got $final_commit_timeout_ms"))
+    end
     
     return AtomicExecutor(
         Dict{UUID,SettlementBatch}(),
@@ -154,16 +232,34 @@ function prepare_batch(executor::AtomicExecutor, settlements::Vector{Settlement}
         
         if !validation.valid
             batch.status = :failed
-            batch.error = join(validation.errors, "; ")
-            return (success=false, reason="Validation failed", batch_id=batch_id, validation=validation)
+            validation_error = ValidationError(
+                "Batch validation failed",
+                batch_id,
+                Dict(
+                    "errors" => validation.errors,
+                    "warnings" => validation.warnings,
+                    "checks_passed" => validation.checks_passed,
+                    "total_checks" => validation.total_checks
+                )
+            )
+            batch.error = string(validation_error)
+            return (success=false, reason="Validation failed", batch_id=batch_id, 
+                   validation=validation, error=validation_error)
         end
         
         # Check timeout
         elapsed_ms = (time_ns() - prepare_start) / 1e6
         if elapsed_ms > executor.prepare_timeout_ms
             batch.status = :failed
-            batch.error = "Prepare timeout"
-            return (success=false, reason="Prepare timeout", batch_id=batch_id)
+            timeout_error = TimeoutError(
+                "Prepare phase timeout exceeded",
+                batch_id,
+                :prepare,
+                elapsed_ms,
+                executor.prepare_timeout_ms
+            )
+            batch.error = string(timeout_error)
+            return (success=false, reason="Prepare timeout", batch_id=batch_id, error=timeout_error)
         end
         
         # Mark as ready
@@ -222,14 +318,27 @@ function execute_atomic!(executor::AtomicExecutor, batch_id::UUID)
             # Check timeout
             elapsed_ms = (time_ns() - commit_start) / 1e6
             if elapsed_ms > executor.commit_timeout_ms
-                throw(ErrorException("Commit timeout at step $i"))
+                timeout_error = TimeoutError(
+                    "Commit phase timeout at step $i",
+                    batch_id,
+                    :commit,
+                    elapsed_ms,
+                    executor.commit_timeout_ms
+                )
+                throw(timeout_error)
             end
             
             # Execute step
             step_result = step(batch, transaction)
             
             if !step_result.success
-                throw(ErrorException("Step $i failed: $(step_result.reason)"))
+                execution_error = ExecutionError(
+                    "Execution step $i failed: $(step_result.reason)",
+                    batch_id,
+                    i,
+                    nothing
+                )
+                throw(execution_error)
             end
             
             push!(executed_steps, i)

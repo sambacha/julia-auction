@@ -40,10 +40,10 @@ using .ParticipantDecisionInterface: AbstractParticipantValidator,
                                         ProductionParticipantValidator
 using .ParticipantDecisionInterface: ValidationRequest, ValidationResult, ValidationConfig
 using .ParticipantDecisionInterface: validate_transaction, configure_validator
-export Participant, Vote, ConsensusProtocol, CoordinationContext
+export Participant, ValidatorParticipant, Vote, ConsensusProtocol, CoordinationContext
 export coordinate_settlement, collect_votes, check_consensus
 export monitor_health, handle_failure, atomic_state_update
-export register_participant, unregister_participant
+export register_participant, unregister_participant, register_validator_participant
 export configure_coordination_validator
 
 """
@@ -101,6 +101,58 @@ mutable struct Participant
             time(),
             Vote[],
             Atomic{Int}(0)
+        )
+    end
+end
+
+"""
+    ValidatorParticipant
+
+Specialized participant for Ethereum validators in blockspace auctions.
+Extends base Participant with validator-specific fields.
+
+# Fields
+- `id::UUID` - Unique participant identifier
+- `address::String` - Network address or endpoint
+- `status::Symbol` - Current status (:active, :inactive, :failed, :slashed)
+- `last_heartbeat::Float64` - Timestamp of last heartbeat
+- `vote_history::Vector{Vote}` - Historical voting record
+- `connection_count::Atomic{Int}` - Thread-safe connection counter
+- `pubkey::String` - Validator public key
+- `stake_amount::Float64` - Validator stake in ETH
+- `reputation_score::Float64` - Reputation score (0.0-1.0)
+- `slash_history::Vector{Dict{String, Any}}` - History of slashing events
+- `mev_preference::Symbol` - MEV preference (:maximize, :fair, :censor_resistant)
+"""
+mutable struct ValidatorParticipant <: Any
+    id::UUID
+    address::String
+    status::Symbol
+    last_heartbeat::Float64
+    vote_history::Vector{Vote}
+    connection_count::Atomic{Int}
+    pubkey::String
+    stake_amount::Float64
+    reputation_score::Float64
+    slash_history::Vector{Dict{String, Any}}
+    mev_preference::Symbol
+    
+    function ValidatorParticipant(id::UUID, address::String, pubkey::String;
+                                  stake_amount::Float64=32.0,
+                                  reputation_score::Float64=1.0,
+                                  mev_preference::Symbol=:fair)
+        new(
+            id,
+            address,
+            :active,
+            time(),
+            Vote[],
+            Atomic{Int}(0),
+            pubkey,
+            stake_amount,
+            reputation_score,
+            Dict{String, Any}[],
+            mev_preference
         )
     end
 end
@@ -612,6 +664,43 @@ function unregister_participant(context::CoordinationContext, participant_id::UU
     end
     
     return removed
+end
+
+"""
+    register_validator_participant(context, address, pubkey; kwargs...)
+
+Register a new validator participant in the coordination context for blockspace auctions.
+
+# Arguments
+- `context::CoordinationContext` - Context to register with
+- `address::String` - Validator network address or endpoint
+- `pubkey::String` - Validator public key
+
+# Keyword Arguments
+- `stake_amount::Float64` - Validator stake amount (default: 32.0 ETH)
+- `reputation_score::Float64` - Initial reputation score (default: 1.0)
+- `mev_preference::Symbol` - MEV preference (default: :fair)
+
+# Returns
+- `UUID` of registered validator participant
+"""
+function register_validator_participant(context::CoordinationContext, address::String, pubkey::String;
+                                       stake_amount::Float64=32.0,
+                                       reputation_score::Float64=1.0,
+                                       mev_preference::Symbol=:fair)
+    participant_id = uuid4()
+    validator = ValidatorParticipant(participant_id, address, pubkey;
+                                    stake_amount=stake_amount,
+                                    reputation_score=reputation_score,
+                                    mev_preference=mev_preference)
+    
+    lock(context.state_lock) do
+        context.participants[participant_id] = validator
+    end
+    
+    @info "Validator participant registered" participant_id=participant_id pubkey=pubkey \
+        stake=stake_amount mev_pref=mev_preference
+    return participant_id
 end
 
 """

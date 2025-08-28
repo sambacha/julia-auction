@@ -142,7 +142,7 @@ struct AuctionResult
 end
 
 # Calculate supply at given price using elastic schedule
-function calculate_supply_at_price(schedule::ElasticSupplySchedule, price::Float64)::Float64
+@inline function calculate_supply_at_price(schedule::ElasticSupplySchedule, price::Float64)::Float64
     if price < schedule.price_floor
         return 0.0
     end
@@ -179,7 +179,7 @@ function calculate_supply_at_price(schedule::ElasticSupplySchedule, price::Float
 end
 
 # Find clearing price where demand meets supply
-function find_clearing_price(bids::Vector{Bid}, config::AuctionConfig)::Float64
+@inline function find_clearing_price(bids::Vector{Bid}, config::AuctionConfig)::Float64
     if isempty(bids)
         return config.reserve_price
     end
@@ -315,26 +315,134 @@ function run_auction(bids::Vector{Bid}, config::AuctionConfig)::AuctionResult
     validated_bids = validate_bids(bids, config)
     
     if isempty(validated_bids)
-        return AuctionResult(
-            config.reserve_price, BidAllocation[], 0.0, 0.0, 0.0, 
-            0.0, 0.0, 0, (time() - start_time) * 1000
-        )
+        return _create_empty_result(config.reserve_price, start_time)
     end
     
-    # Find clearing price
+    # Find clearing price and available supply
     clearing_price = find_clearing_price(validated_bids, config)
-    
-    # Determine available supply at clearing price
     available_supply = calculate_supply_at_price(config.supply_schedule, clearing_price)
     
+    # Perform allocation
+    allocations, num_tie_breaks = _perform_allocation(
+        validated_bids, 
+        clearing_price, 
+        available_supply, 
+        config
+    )
+    
+    # Calculate final metrics
+    result_metrics = _calculate_auction_metrics(
+        allocations, 
+        validated_bids, 
+        clearing_price, 
+        available_supply
+    )
+    
+    execution_time_ms = (time() - start_time) * 1000
+    
+    return AuctionResult(
+        clearing_price,
+        allocations,
+        result_metrics.total_quantity,
+        result_metrics.total_revenue,
+        result_metrics.supply_utilized,
+        result_metrics.bid_shading_estimate,
+        result_metrics.efficiency_score,
+        num_tie_breaks,
+        execution_time_ms,
+    )
+end
+
+"""
+    _create_empty_result(reserve_price, start_time)
+
+Create an empty auction result when no valid bids are available.
+
+# Arguments
+- `reserve_price::Float64`: The auction reserve price
+- `start_time::Float64`: Auction start timestamp for calculating execution time
+
+# Returns
+- `AuctionResult`: Empty result with zero allocations and metrics
+"""
+function _create_empty_result(reserve_price::Float64, start_time::Float64)::AuctionResult
+    execution_time_ms = (time() - start_time) * 1000
+    return AuctionResult(
+        reserve_price, BidAllocation[], 0.0, 0.0, 0.0, 
+        0.0, 0.0, 0, execution_time_ms
+    )
+end
+
+"""
+    _perform_allocation(validated_bids, clearing_price, available_supply, config)
+
+Perform bid allocation with tie-breaking for an auction.
+
+# Arguments
+- `validated_bids::Vector{Bid}`: Valid bids to process
+- `clearing_price::Float64`: The auction clearing price
+- `available_supply::Float64`: Total supply available for allocation  
+- `config::AuctionConfig`: Auction configuration settings
+
+# Returns
+- `Tuple{Vector{BidAllocation}, Int}`: (allocations, number of tie-breaks)
+"""
+function _perform_allocation(
+    validated_bids::Vector{Bid}, 
+    clearing_price::Float64, 
+    available_supply::Float64, 
+    config::AuctionConfig
+)::Tuple{Vector{BidAllocation}, Int}
     # Separate bids above, at, and below clearing
     bids_above = Bid[b for b in validated_bids if b.price > clearing_price]
     bids_at = Bid[b for b in validated_bids if b.price == clearing_price]
     
-    # Allocate to bids above clearing first
     allocations = BidAllocation[]
     remaining_supply = available_supply
     
+    # Allocate to bids above clearing first
+    remaining_supply = _allocate_above_clearing(
+        allocations, 
+        bids_above, 
+        clearing_price, 
+        remaining_supply, 
+        config
+    )
+    
+    # Handle tie-breaking for bids at clearing price
+    num_tie_breaks = _handle_ties(
+        allocations, 
+        bids_at, 
+        clearing_price, 
+        remaining_supply, 
+        config
+    )
+    
+    return allocations, num_tie_breaks
+end
+
+"""
+    _allocate_above_clearing(allocations, bids_above, clearing_price, remaining_supply, config)
+
+Allocate supply to bids above the clearing price.
+
+# Arguments
+- `allocations::Vector{BidAllocation}`: Allocation results to append to
+- `bids_above::Vector{Bid}`: Bids with price above clearing price
+- `clearing_price::Float64`: The auction clearing price
+- `remaining_supply::Float64`: Supply remaining for allocation
+- `config::AuctionConfig`: Auction configuration for partial fills
+
+# Returns
+- `Float64`: Supply remaining after allocation
+"""
+function _allocate_above_clearing(
+    allocations::Vector{BidAllocation},
+    bids_above::Vector{Bid},
+    clearing_price::Float64,
+    remaining_supply::Float64,
+    config::AuctionConfig
+)::Float64
     for bid in bids_above
         if remaining_supply >= bid.quantity
             allocation = BidAllocation(bid, bid.quantity, clearing_price * bid.quantity)
@@ -347,43 +455,49 @@ function run_auction(bids::Vector{Bid}, config::AuctionConfig)::AuctionResult
             break
         end
     end
-    
-    # Handle tie-breaking for bids at clearing price
-    num_tie_breaks = 0
-    if remaining_supply > 0 && !isempty(bids_at)
-        num_tie_breaks = length(bids_at)
-        tied_winners = resolve_ties(bids_at, remaining_supply, config.tie_breaking)
-        
-        for bid in tied_winners
-            allocation = BidAllocation(bid, bid.quantity, clearing_price * bid.quantity)
-            push!(allocations, allocation)
-            remaining_supply -= bid.quantity
-        end
+    return remaining_supply
+end
+
+function _handle_ties(
+    allocations::Vector{BidAllocation},
+    bids_at::Vector{Bid},
+    clearing_price::Float64,
+    remaining_supply::Float64,
+    config::AuctionConfig
+)::Int
+    if remaining_supply <= 0 || isempty(bids_at)
+        return 0
     end
     
-    # Calculate metrics
+    num_tie_breaks = length(bids_at)
+    tied_winners = resolve_ties(bids_at, remaining_supply, config.tie_breaking)
+    
+    for bid in tied_winners
+        allocation = BidAllocation(bid, bid.quantity, clearing_price * bid.quantity)
+        push!(allocations, allocation)
+    end
+    
+    return num_tie_breaks
+end
+
+function _calculate_auction_metrics(
+    allocations::Vector{BidAllocation},
+    validated_bids::Vector{Bid},
+    clearing_price::Float64,
+    available_supply::Float64
+)::NamedTuple{(:total_quantity, :total_revenue, :supply_utilized, :bid_shading_estimate, :efficiency_score), Tuple{Float64, Float64, Float64, Float64, Float64}}
     total_quantity = sum(a.allocated_quantity for a in allocations)
     total_revenue = sum(a.payment for a in allocations)
     supply_utilized = total_quantity / available_supply
-    
-    # Estimate bid shading
     bid_shading_estimate = analyze_bid_shading(validated_bids, clearing_price)
-    
-    # Calculate efficiency score
     efficiency_score = calculate_efficiency(allocations, validated_bids, clearing_price)
     
-    execution_time_ms = (time() - start_time) * 1000
-    
-    return AuctionResult(
-        clearing_price,
-        allocations,
-        total_quantity,
-        total_revenue,
-        supply_utilized,
-        bid_shading_estimate,
-        efficiency_score,
-        num_tie_breaks,
-        execution_time_ms
+    return (
+        total_quantity=total_quantity,
+        total_revenue=total_revenue,
+        supply_utilized=supply_utilized,
+        bid_shading_estimate=bid_shading_estimate,
+        efficiency_score=efficiency_score
     )
 end
 
