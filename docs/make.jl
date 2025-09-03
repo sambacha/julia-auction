@@ -15,7 +15,7 @@ makedocs(
     format = DocumenterVitepress.MarkdownVitepress(
         repo = "https://github.com/julia-auction/julia-auction",
         devurl = "dev",
-        devbranch = "main",
+        devbranch = "trunk",  # Changed to match your default branch
     ),
     
     # Module documentation - comment out for now since modules may not be loaded
@@ -69,9 +69,13 @@ makedocs(
 )
 
 # Deploy documentation to GitHub Pages
-deploydocs(
-    repo = "github.com/julia-auction/julia-auction.git",
-    devbranch = "main",
-    push_preview = true,
-    forcepush = true,
-)
+# Only deploy when running in CI
+if get(ENV, "CI", "false") == "true"
+    deploydocs(
+        repo = "github.com/julia-auction/julia-auction.git",
+        devbranch = "trunk",  # Changed to match your default branch
+        push_preview = true,
+        forcepush = true,
+        target = "build",  # Specify the build directory
+    )
+end
