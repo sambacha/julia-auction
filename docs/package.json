@@ -1,0 +1,20 @@
+{
+  "name": "julia-auction-docs",
+  "version": "1.0.0",
+  "description": "Documentation for Julia Auction System",
+  "scripts": {
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "@shikijs/vitepress-twoslash": "^1.0.0",
+    "markdown-it-mathjax3": "^4.3.2",
+    "vitepress": "^1.0.0"
+  },
+  "dependencies": {
+    "@nolebase/vitepress-plugin-enhanced-readabilities": "^2.18.2",
+    "markdown-it-footnote": "^4.0.0",
+    "vitepress-plugin-tabs": "^0.7.1"
+  }
+}

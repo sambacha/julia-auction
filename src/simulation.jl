@@ -5,9 +5,16 @@ This module provides comprehensive simulation and benchmarking capabilities for 
 including performance profiling, scalability analysis, and efficiency metrics.
 """
 
+using BenchmarkTools
+using Dates
 using Random
 using Statistics
-using BenchmarkTools
+# Import configuration manager
+include("config/ConfigManager.jl")
+using .ConfigManager: load_config, get_config, AuctionConfig as GlobalAuctionConfig
+# Define PerformanceValue union type for simulation metrics
+const PerformanceValue = Union{Float64,Int64,String,Bool,Vector{Float64},Vector{Int64},DateTime,Nothing}
+const PerformanceDict = Dict{String,PerformanceValue}
 
 # Configuration Management
 """
@@ -30,25 +37,57 @@ struct AuctionConfig
     min_value::Float64
     max_value::Float64
     reserve_price::Float64
-    seed::Union{Int, Nothing}
+    seed::Union{Int,Nothing}
     parallel::Bool
-    
+
     function AuctionConfig(;
-        num_rounds::Int = 1000,
-        num_items::Int = 1,
-        min_value::Float64 = 1.0,
-        max_value::Float64 = 100.0,
-        reserve_price::Float64 = 0.0,
-        seed::Union{Int, Nothing} = nothing,
-        parallel::Bool = false
+        num_rounds::Union{Int,Nothing} = nothing,
+        num_items::Union{Int,Nothing} = nothing,
+        min_value::Union{Float64,Nothing} = nothing,
+        max_value::Union{Float64,Nothing} = nothing,
+        reserve_price::Union{Float64,Nothing} = nothing,
+        seed::Union{Int,Nothing} = nothing,
+        parallel::Bool = false,
+        global_config::GlobalAuctionConfig = load_config(),
     )
-        @assert num_rounds > 0 "Number of rounds must be positive"
-        @assert num_items > 0 "Number of items must be positive"
-        @assert min_value >= 0 "Minimum value must be non-negative"
-        @assert max_value > min_value "Maximum value must be greater than minimum value"
-        @assert reserve_price >= 0 "Reserve price must be non-negative"
-        
-        new(num_rounds, num_items, min_value, max_value, reserve_price, seed, parallel)
+        # Use provided values or load from global config
+        final_num_rounds = if num_rounds !== nothing
+            num_rounds
+        else
+            get_config(global_config, "simulation.default_num_rounds", Int)
+        end
+
+        final_num_items = if num_items !== nothing
+            num_items
+        else
+            get_config(global_config, "simulation.default_num_items", Int)
+        end
+
+        final_min_value = if min_value !== nothing
+            min_value
+        else
+            get_config(global_config, "simulation.min_valuation", Float64)
+        end
+
+        final_max_value = if max_value !== nothing
+            max_value
+        else
+            get_config(global_config, "simulation.max_valuation", Float64)
+        end
+
+        final_reserve_price = if reserve_price !== nothing
+            reserve_price
+        else
+            get_config(global_config, "simulation.default_reserve_price", Float64)
+        end
+
+        @assert final_num_rounds > 0 "Number of rounds must be positive"
+        @assert final_num_items > 0 "Number of items must be positive"
+        @assert final_min_value >= 0 "Minimum value must be non-negative"
+        @assert final_max_value > final_min_value "Maximum value must be " * "greater than minimum value"
+        @assert final_reserve_price >= 0 "Reserve price must be non-negative"
+
+        new(final_num_rounds, final_num_items, final_min_value, final_max_value, final_reserve_price, seed, parallel)
     end
 end
 
@@ -65,14 +104,23 @@ default_config() = AuctionConfig()
 
 Returns a minimal AuctionConfig for quick testing.
 """
-quick_test_config() = AuctionConfig(num_rounds=10, num_items=1)
+quick_test_config(global_config::GlobalAuctionConfig = load_config()) = AuctionConfig(
+    num_rounds = get_config(global_config, "simulation.quick_test_rounds", Int),
+    num_items = get_config(global_config, "simulation.default_num_items", Int),
+    global_config = global_config,
+)
 
 """
     stress_test_config()
 
 Returns an AuctionConfig for stress testing with many rounds.
 """
-stress_test_config() = AuctionConfig(num_rounds=10000, num_items=5, parallel=true)
+stress_test_config(global_config::GlobalAuctionConfig = load_config()) = AuctionConfig(
+    num_rounds = get_config(global_config, "simulation.stress_test_rounds", Int),
+    num_items = get_config(global_config, "simulation.stress_test_items", Int),
+    parallel = true,
+    global_config = global_config,
+)
 
 # Result Types
 """
@@ -97,7 +145,7 @@ struct SimulationResult
     revenues::Vector{Float64}
     efficiencies::Vector{Float64}
     winning_bids::Vector{Float64}
-    bidder_wins::Dict{Int, Int}
+    bidder_wins::Dict{Int,Int}
     total_time::Float64
     memory_usage::Int
     num_allocations::Int
@@ -155,60 +203,54 @@ function run_simulation(auction_type, bidders, config::AuctionConfig)
     if config.seed !== nothing
         Random.seed!(config.seed)
     end
-    
+
     # Initialize result vectors
     revenues = Float64[]
     efficiencies = Float64[]
     winning_bids = Float64[]
-    bidder_wins = Dict{Int, Int}()
-    for i in 1:length(bidders)
+    bidder_wins = Dict{Int,Int}()
+    for i = 1:length(bidders)
         bidder_wins[i] = 0
     end
-    
+
     # Track performance metrics
     start_time = time()
     gc_stats_before = Base.gc_num()
-    
+
     # Run simulation rounds
-    for round in 1:config.num_rounds
+    for round = 1:config.num_rounds
         # Create auction instance
         auction = auction_type
-        
-        # Generate random valuations for this round
-        valuations = rand(config.min_value:0.01:config.max_value, length(bidders))
-        
-        # Collect bids from all bidders
-        bids = []
-        for (i, bidder) in enumerate(bidders)
-            bid = make_bid(bidder, valuations[i], auction)
-            push!(bids, (bid, i, valuations[i]))
-        end
-        
+
+        # For simulation, we use the provided bidders directly
+        # They already have their strategies set
+
         # Run auction
-        result = conduct_auction(auction, bids, config.reserve_price)
-        
-        # Record results
-        push!(revenues, result.revenue)
-        push!(winning_bids, result.winning_bid)
-        
+        result = conduct_auction(auction, bidders)
+
+        # Record results - extract from statistics
+        revenue = result.statistics["revenue"].value
+        push!(revenues, revenue)
+        push!(winning_bids, result.winning_price)
+
         # Update winner count
-        if result.winner_id > 0
+        if result.winner_id !== nothing && result.winner_id > 0
             bidder_wins[result.winner_id] += 1
         end
-        
-        # Calculate efficiency for this round
-        efficiency = calculate_round_efficiency(result, bids)
+
+        # Calculate efficiency for this round - use from statistics
+        efficiency = result.statistics["efficiency"].value
         push!(efficiencies, efficiency)
     end
-    
+
     # Calculate performance metrics
     end_time = time()
     total_time = end_time - start_time
-    
+
     gc_stats_after = Base.gc_num()
     memory_usage = gc_stats_after.total_time - gc_stats_before.total_time
     num_allocations = gc_stats_after.malloc - gc_stats_before.malloc
-    
+
     return SimulationResult(
         string(typeof(auction_type)),
         config,
@@ -218,7 +260,7 @@ function run_simulation(auction_type, bidders, config::AuctionConfig)
         bidder_wins,
         total_time,
         Int(memory_usage),
-        Int(num_allocations)
+        Int(num_allocations),
     )
 end
 
@@ -228,7 +270,7 @@ end
 Convenience method for running simulations with default configuration.
 """
 function run_simulation(auction_type, bidders, num_rounds::Int)
-    config = AuctionConfig(num_rounds=num_rounds)
+    config = AuctionConfig(num_rounds = num_rounds)
     return run_simulation(auction_type, bidders, config)
 end
 
@@ -257,7 +299,7 @@ result = benchmark_auction(auctions, bidder_configs, sizes)
 function benchmark_auction(auction_types, bidder_configs, sizes::Vector{Int})
     n_auctions = length(auction_types)
     n_sizes = length(sizes)
-    
+
     # Initialize result matrices
     execution_times = zeros(n_auctions, n_sizes)
     memory_usage = zeros(Int, n_auctions, n_sizes)
@@ -265,22 +307,22 @@ function benchmark_auction(auction_types, bidder_configs, sizes::Vector{Int})
     efficiency_scores = zeros(n_auctions, n_sizes)
     revenue_means = zeros(n_auctions, n_sizes)
     revenue_stds = zeros(n_auctions, n_sizes)
-    
-    config = AuctionConfig(num_rounds=100, seed=42)  # Fixed config for fair comparison
-    
+
+    config = AuctionConfig(num_rounds = 100, seed = 42)  # Fixed config for fair comparison
+
     for (i, auction_type) in enumerate(auction_types)
         for (j, size) in enumerate(sizes)
             # Create bidders for this size
             bidders = create_bidders_for_size(bidder_configs[1], size)
-            
+
             # Benchmark this configuration
             benchmark_result = @benchmark run_simulation($auction_type, $bidders, $config)
-            
+
             # Extract metrics
             execution_times[i, j] = minimum(benchmark_result.times) / 1e9  # Convert to seconds
             memory_usage[i, j] = benchmark_result.memory
             allocations[i, j] = benchmark_result.allocs
-            
+
             # Run actual simulation for efficiency and revenue metrics
             sim_result = run_simulation(auction_type, bidders, config)
             efficiency_scores[i, j] = calculate_efficiency(sim_result)
@@ -288,7 +330,7 @@ function benchmark_auction(auction_types, bidder_configs, sizes::Vector{Int})
             revenue_stds[i, j] = std(sim_result.revenues)
         end
     end
-    
+
     return BenchmarkResult(
         [string(typeof(auction)) for auction in auction_types],
         sizes,
@@ -297,7 +339,7 @@ function benchmark_auction(auction_types, bidder_configs, sizes::Vector{Int})
         allocations,
         efficiency_scores,
         revenue_means,
-        revenue_stds
+        revenue_stds,
     )
 end
 
@@ -322,10 +364,10 @@ function calculate_round_efficiency(auction_result, bids)
     if isempty(bids)
         return 0.0
     end
-    
+
     # Maximum possible welfare (highest valuation)
     max_welfare = maximum(bid[3] for bid in bids)  # bid[3] is valuation
-    
+
     # Actual welfare (winner's valuation, or 0 if no winner)
     actual_welfare = if auction_result.winner_id > 0
         winner_bid = bids[auction_result.winner_id]
@@ -333,7 +375,7 @@ function calculate_round_efficiency(auction_result, bids)
     else
         0.0
     end
-    
+
     return max_welfare > 0 ? actual_welfare / max_welfare : 0.0
 end
 
@@ -348,28 +390,28 @@ Analyze individual bidder performance from simulation results.
 function analyze_bidder_performance(results::SimulationResult)
     total_rounds = length(results.revenues)
     n_bidders = length(results.bidder_wins)
-    
-    performance_metrics = Dict{String, Any}()
-    
+
+    performance_metrics = PerformanceDict()
+
     # Calculate win rates
-    win_rates = Dict{Int, Float64}()
+    win_rates = Dict{Int,Float64}()
     for (bidder_id, wins) in results.bidder_wins
         win_rates[bidder_id] = wins / total_rounds
     end
     performance_metrics["win_rates"] = win_rates
-    
+
     # Calculate average revenue contribution
     avg_revenue = mean(results.revenues)
     performance_metrics["average_revenue"] = avg_revenue
     performance_metrics["total_revenue"] = sum(results.revenues)
-    
+
     # Market concentration (Herfindahl-Hirschman Index)
     hhi = sum(wr^2 for wr in values(win_rates))
     performance_metrics["market_concentration"] = hhi
-    
+
     # Revenue volatility
     performance_metrics["revenue_volatility"] = std(results.revenues) / avg_revenue
-    
+
     return performance_metrics
 end
 
@@ -379,38 +421,38 @@ end
 Generate comprehensive summary statistics from simulation results.
 """
 function generate_summary_statistics(results::SimulationResult)
-    summary = Dict{String, Any}()
-    
+    summary = PerformanceDict()
+
     # Basic statistics
     summary["auction_type"] = results.auction_type
     summary["total_rounds"] = length(results.revenues)
     summary["total_time"] = results.total_time
     summary["rounds_per_second"] = length(results.revenues) / results.total_time
-    
+
     # Revenue statistics
     summary["revenue_mean"] = mean(results.revenues)
     summary["revenue_median"] = median(results.revenues)
     summary["revenue_std"] = std(results.revenues)
     summary["revenue_min"] = minimum(results.revenues)
     summary["revenue_max"] = maximum(results.revenues)
-    
+
     # Efficiency statistics
     summary["efficiency_mean"] = mean(results.efficiencies)
     summary["efficiency_median"] = median(results.efficiencies)
     summary["efficiency_std"] = std(results.efficiencies)
-    
+
     # Winning bid statistics
     summary["winning_bid_mean"] = mean(results.winning_bids)
     summary["winning_bid_median"] = median(results.winning_bids)
     summary["winning_bid_std"] = std(results.winning_bids)
-    
+
     # Performance metrics
     summary["memory_usage_mb"] = results.memory_usage / (1024 * 1024)
     summary["allocations_per_round"] = results.num_allocations / length(results.revenues)
-    
+
     # Bidder performance
     summary["bidder_performance"] = analyze_bidder_performance(results)
-    
+
     return summary
 end
 
@@ -423,18 +465,18 @@ Create a vector of bidders for benchmarking purposes.
 function create_bidders_for_size(bidder_config_func, size::Int)
     base_bidders = bidder_config_func()
     bidders = []
-    
-    for i in 1:size
+
+    for i = 1:size
         # Create variations of base bidders
         base_idx = ((i - 1) % length(base_bidders)) + 1
         base_bidder = base_bidders[base_idx]
-        
+
         # Create a variation with slightly different parameters
         variation_factor = 0.8 + 0.4 * rand()  # Random factor between 0.8 and 1.2
         varied_bidder = create_bidder_variation(base_bidder, variation_factor)
         push!(bidders, varied_bidder)
     end
-    
+
     return bidders
 end
 
@@ -467,21 +509,21 @@ Placeholder function for auction execution.
 """
 function conduct_auction(auction, bids, reserve_price)
     if isempty(bids)
-        return (revenue=0.0, winning_bid=0.0, winner_id=0)
+        return (revenue = 0.0, winning_bid = 0.0, winner_id = 0)
     end
-    
+
     # Simple first-price auction placeholder
     valid_bids = filter(bid -> bid[1] >= reserve_price, bids)
     if isempty(valid_bids)
-        return (revenue=0.0, winning_bid=0.0, winner_id=0)
+        return (revenue = 0.0, winning_bid = 0.0, winner_id = 0)
     end
-    
+
     # Find highest bid
     winning_bid_info = valid_bids[argmax([bid[1] for bid in valid_bids])]
     winning_bid = winning_bid_info[1]
     winner_id = winning_bid_info[2]
-    
-    return (revenue=winning_bid, winning_bid=winning_bid, winner_id=winner_id)
+
+    return (revenue = winning_bid, winning_bid = winning_bid, winner_id = winner_id)
 end
 
 # Export public interface

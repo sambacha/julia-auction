@@ -1,0 +1,144 @@
+# Production Configuration for Julia Auction System
+# This file contains production-specific overrides for the auction system
+# All other values inherit from default.toml
+
+[phantom_auction]
+# Production phantom auction settings - optimized for real trading
+bid_probability = 0.25             # Slightly lower bid probability for stability
+duration_ms = 80                   # Faster auction duration for production
+min_improvement_bps = 5            # Lower minimum improvement for liquidity
+max_improvement_bps = 30           # Conservative maximum improvement
+reveal_delay_ms = 15               # Shorter reveal delay for speed
+min_participants = 3               # Higher minimum for production reliability
+
+[coordinator]
+# Production coordination - stricter requirements
+consensus_threshold = 0.75         # Higher consensus threshold (3/4 majority)
+base_success_rate = 0.95          # Higher expected success rate
+timeout_seconds = 20.0            # Shorter timeout for faster operations
+retry_count = 2                    # Fewer retries for speed
+heartbeat_interval_seconds = 3.0   # More frequent heartbeats
+min_response_rate = 0.8           # Higher response rate required
+heartbeat_timeout_multiplier = 2.0  # Stricter timeout in production (2 missed heartbeats)
+
+[settlement]
+# Production settlement configuration
+base_gas_cost = 120000            # Higher gas cost estimate for mainnet
+timeout_ms = 150.0                # Shorter timeout for production
+max_retries = 2                   # Fewer retries in production
+price_improvement_threshold_bps = 5  # Lower threshold for more opportunities
+max_batch_size = 100              # Larger batches for production efficiency
+fallback_enabled = true           # Keep fallback enabled in production
+validation_slippage_tolerance = 0.015  # Stricter validation slippage (1.5%)
+liquidity_tolerance = 0.03        # Lower liquidity tolerance (3%)
+max_price_deviation = 0.03        # Stricter price deviation (3%)
+max_slippage_tolerance = 0.015    # Stricter slippage tolerance (1.5%)
+gas_limit = 15000000              # Higher gas limit for production
+execution_slippage_tolerance = 0.003  # Stricter execution slippage (0.3%)
+execution_tolerance = 0.015       # Stricter execution tolerance (1.5%)
+step_time_estimate_ms = 15.0      # Faster step estimates for production
+settlement_time_estimate_ms = 3.0 # Faster settlement estimates
+
+[circuit_breaker]
+# Production circuit breaker - more conservative
+failure_threshold = 3              # Trip faster in production
+recovery_threshold = 5             # Require more successes to recover
+timeout_ms = 15000.0              # Shorter recovery timeout (15 seconds)
+slow_call_threshold_ms = 50.0      # Stricter slow call threshold
+half_open_max_calls = 5            # Fewer test calls in half-open
+volume_threshold = 5               # Lower volume threshold for faster trips
+error_percentage_threshold = 30.0   # Lower error rate threshold
+monitoring_window_ms = 30000.0     # Shorter monitoring window (30 seconds)
+
+[timeouts]
+# Production timeout configuration - aggressive for performance
+auction_timeout_ms = 30.0          # Faster auction processing
+settlement_timeout_ms = 100.0      # Shorter settlement timeout
+cfmm_bridge_timeout_ms = 60.0      # Shorter CFMM bridge timeout
+phantom_auction_timeout_ms = 20.0  # Faster phantom auction creation
+default_operation_timeout_ms = 50.0 # Shorter default timeout
+health_check_interval_ms = 15000.0  # More frequent health checks (15 seconds)
+settlement_prepare_timeout_ms = 60.0   # Shorter prepare timeout for production
+settlement_commit_timeout_ms = 300.0   # Shorter commit timeout for production
+
+[retry]
+# Production retry configuration - fast recovery
+max_retry_attempts = 1             # Single retry only in production
+base_retry_delay_ms = 5.0          # Faster initial retry
+max_retry_delay_ms = 50.0          # Lower max retry delay
+retry_jitter_ratio = 0.1           # Less jitter for predictability
+
+[performance]
+# Production performance targets - strict SLA
+p99_latency_target_ms = 5.0        # Stricter 99th percentile target
+p95_latency_target_ms = 3.0        # Stricter 95th percentile target
+max_acceptable_latency_ms = 50.0    # Lower hard limit
+slow_operation_threshold_ms = 8.0   # Stricter slow operation threshold
+memory_usage_threshold_percent = 60.0  # Conservative memory threshold
+cpu_usage_threshold_percent = 50.0     # Conservative CPU threshold
+disk_usage_threshold_percent = 70.0    # Conservative disk threshold
+
+[resources]
+# Production resource limits - scaled for high throughput
+max_concurrent_auctions = 2000     # Higher concurrency for production
+max_pending_settlements = 1000     # More pending settlements allowed
+max_memory_usage_mb = 8192         # Higher memory limit (8GB)
+thread_pool_size = 16              # Larger thread pool
+max_records = 500                  # Fewer records to reduce memory pressure
+
+[monitoring]
+# Production monitoring - more frequent and longer retention
+resource_monitor_interval_ms = 5000.0    # More frequent monitoring (5 seconds)
+performance_report_interval_ms = 30000.0  # More frequent reports (30 seconds)
+metrics_retention_hours = 168            # Longer retention (1 week)
+log_retention_days = 30                  # Longer log retention (1 month)
+performance_data_retention_hours = 168   # Longer performance retention (1 week)
+
+[alerting]
+# Production alerting - more sensitive thresholds
+sla_violation_alert_threshold_percent = 1.0   # Alert if >1% violate SLA
+error_rate_alert_threshold_percent = 0.5      # Alert if >0.5% error rate
+consecutive_failures_alert_threshold = 2      # Alert after 2 consecutive failures
+
+[simulation]
+# Production simulation settings - reduced for performance
+default_num_rounds = 100           # Fewer rounds in production testing
+quick_test_rounds = 5              # Very quick tests only
+stress_test_rounds = 1000          # Reduced stress testing
+stress_test_items = 3              # Fewer items for stress tests
+
+[bidding]
+# Production bidding configuration
+default_shading_factor = 0.05      # Conservative shading
+noise_variance = 0.05              # Lower noise for stability
+valuation_multiplier_min = 0.9     # Narrower valuation range
+valuation_multiplier_max = 1.1     # Narrower valuation range
+
+[auction_mechanics]
+# Production auction mechanics - strict validation
+tie_breaking_default = "first_timestamp"  # Deterministic tie breaking
+second_price_safety_factor = 0.005        # Smaller safety factor
+bid_validation_timeout_ms = 2.0           # Faster validation timeout
+commitment_verification_enabled = true     # Always verify in production
+price_weight = 0.85                       # Higher price weight for production
+fee_weight = 0.15                         # Lower fee weight for production
+
+[network]
+# Production network configuration - optimized for real trading
+connection_timeout_ms = 2000.0     # Shorter connection timeout
+read_timeout_ms = 1000.0           # Shorter read timeout
+max_connections = 500              # Higher connection limit
+keepalive_interval_ms = 15000.0    # More frequent keepalive
+
+[security]
+# Production security - maximum security enabled
+enable_commitment_hashing = true   # Always enabled in production
+max_bid_value_multiplier = 1.5     # Conservative multiplier
+priority_fee_max_ratio = 0.005     # Lower max priority fee ratio
+signature_verification_enabled = true  # Always verify signatures
+
+[environment]
+# Production environment settings
+environment = "production"         # Production environment
+debug_logging = false              # Disable debug logging for performance
+performance_logging = true         # Keep performance logging enabled

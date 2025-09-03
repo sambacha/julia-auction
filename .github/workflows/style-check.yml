@@ -1,0 +1,38 @@
+name: Julia Style Check
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  style-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - uses: julia-actions/setup-julia@v1
+      with:
+        version: '1.11'
+    
+    - name: Install JuliaFormatter
+      run: julia -e 'using Pkg; Pkg.add("JuliaFormatter")'
+    
+    - name: Check formatting
+      run: |
+        julia -e '
+        using JuliaFormatter
+        
+        # Check if code is formatted
+        if !format(".", verbose=true, check=true)
+            println("Code style violations found!")
+            exit(1)
+        else
+            println("All files pass style checks!")
+        end'
+    
+    - name: Run custom style checker
+      run: |
+        julia style_tools/StyleChecker.jl

@@ -1,0 +1,3 @@
+[submodule "CFMMRouter.jl"]
+	path = CFMMRouter.jl
+	url = https://github.com/bcc-research/CFMMRouter.jl
