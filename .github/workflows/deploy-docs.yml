@@ -4,7 +4,7 @@ name: Deploy Documentation to GitHub Pages
 on:
   # Runs on pushes targeting the `trunk` branch (your default branch)
   push:
-    branches: [trunk]
+    branches: [master]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -49,7 +49,7 @@ jobs:
       - name: Install Node dependencies
         run: |
           cd docs
-          npm ci
+          npm install
       
       - name: Install Julia dependencies
         run: |
