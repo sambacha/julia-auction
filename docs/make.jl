@@ -8,14 +8,14 @@ push!(LOAD_PATH, "../AuctionKit.jl/src/")
 
 # Configure DocumenterVitepress
 makedocs(
-    sitename = "Julia Auction System",
-    authors = "Julia Auction Team",
+    sitename = "Julia Auctions",
+    authors = "Sam Bacha",
     
     # Use DocumenterVitepress format
     format = DocumenterVitepress.MarkdownVitepress(
-        repo = "https://github.com/julia-auction/julia-auction",
+        repo = "https://github.com/sambacha/julia-auction",
         devurl = "dev",
-        devbranch = "main",
+        devbranch = "master",
     ),
     
     # Module documentation - comment out for now since modules may not be loaded
@@ -65,13 +65,17 @@ makedocs(
     ],
     
     # Custom settings
-    repo = "https://github.com/julia-auction/julia-auction",
+    repo = "https://github.com/sambacha/julia-auction",
 )
 
 # Deploy documentation to GitHub Pages
-deploydocs(
-    repo = "github.com/julia-auction/julia-auction.git",
-    devbranch = "main",
-    push_preview = true,
-    forcepush = true,
-)
+# Only deploy when running in CI
+if get(ENV, "CI", "false") == "true"
+    deploydocs(
+        repo = "github.com/sambacha/julia-auction.git",
+        devbranch = "master",  # Changed to match your default branch
+        push_preview = true,
+        forcepush = true,
+        target = "build",  # Specify the build directory
+    )
+end
