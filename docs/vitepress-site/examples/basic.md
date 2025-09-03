@@ -1,66 +1,61 @@
 # Basic Auction Examples
 
-## Getting Started
+## Document Information
+**Type:** Code Examples
+**Level:** Beginner
+**Prerequisites:** Julia 1.6+ and package installation
 
-This guide provides basic examples of using the Julia Auction System.
+## Executive Summary
+
+This guide demonstrates fundamental auction system usage through practical examples. Code samples progress from simple uniform price auctions to elastic supply configurations. Each example includes complete setup, execution, and result analysis.
 
 ## Simple Uniform Price Auction
 
 ### Basic Setup
+Start with a minimal auction configuration:
 
 ```julia
 using AuctionSystem
 
-# Create a simple auction configuration
+# Configure auction
 config = AuctionConfig(
-    supply = 1000.0,  # 1000 units available
-    reserve_price = 10.0,  # Minimum price of $10
+    supply = 1000.0,        # Units available
+    reserve_price = 10.0,   # Minimum price
     auction_type = UNIFORM_PRICE
 )
 
-# Create some bids
+# Create bids
 bids = [
-    Bid("bidder1", 15.0, 200.0),  # Bidder 1: $15 for 200 units
-    Bid("bidder2", 14.0, 300.0),  # Bidder 2: $14 for 300 units  
-    Bid("bidder3", 13.0, 400.0),  # Bidder 3: $13 for 400 units
-    Bid("bidder4", 12.0, 500.0),  # Bidder 4: $12 for 500 units
-    Bid("bidder5", 11.0, 100.0),  # Bidder 5: $11 for 100 units
+    Bid("bidder1", 15.0, 200.0),  # $15 for 200 units
+    Bid("bidder2", 14.0, 300.0),  # $14 for 300 units
+    Bid("bidder3", 13.0, 400.0),  # $13 for 400 units
+    Bid("bidder4", 12.0, 500.0),  # $12 for 500 units
 ]
 
-# Run the auction
+# Run auction
 result = run_auction(bids, config)
 
 # Display results
-println("Clearing price: \$\$(result.clearing_price)")
-println("Total allocated: \$(result.total_allocated) units")
-println("\nAllocations:")
-for alloc in result.allocations
-    println("  \$(alloc.bidder_id): \$(alloc.quantity) units at \$\$(result.clearing_price)")
-end
+println("Clearing price: $(result.clearing_price)")
+println("Allocated: $(result.total_allocated) units")
 ```
 
 ### Expected Output
-
 ```
-Clearing price: $12.0
-Total allocated: 1000.0 units
-
-Allocations:
-  bidder1: 200.0 units at $12.0
-  bidder2: 300.0 units at $12.0
-  bidder3: 400.0 units at $12.0
-  bidder4: 100.0 units at $12.0
+Clearing price: 12.0
+Allocated: 1000.0 units
 ```
+
+The auction clears at $12 where demand meets supply. Higher bidders receive full allocations at the uniform clearing price.
 
 ## Augmented Auction with Elastic Supply
 
 ### Configuration
+Elastic supply adjusts quantity based on price:
 
 ```julia
-using AuctionSystem
-
-# Create elastic supply schedule
-supply_schedule = ElasticSupplySchedule(
+# Create elastic supply
+supply = ElasticSupplySchedule(
     base_quantity = 1000.0,
     price_floor = 10.0,
     price_ceiling = 20.0,
@@ -70,77 +65,34 @@ supply_schedule = ElasticSupplySchedule(
 
 # Configure augmented auction
 config = AuctionConfig(
-    supply_schedule = supply_schedule,
+    supply_schedule = supply,
     tie_breaking = AugmentedTieBreaking(0.7, 0.3),
     reserve_price = 10.0
 )
 
-# Generate more realistic bids
+# Generate sample bids
 bids = generate_sample_bids(
     num_bidders = 10,
     price_range = (8.0, 25.0),
     quantity_range = (50.0, 300.0)
 )
 
-# Run augmented auction
+# Run and analyze
 result = run_auction(bids, config)
-
-# Analyze results
-println("Results with Elastic Supply:")
-println("  Clearing price: \$\$(result.clearing_price)")
-println("  Supply at clearing: \$(result.final_supply)")
-println("  Revenue: \$\$(result.total_revenue)")
+println("Clearing price: $(result.clearing_price)")
+println("Final supply: $(result.final_supply)")
+println("Revenue: $(result.total_revenue)")
 ```
 
-## Batch Auction Processing
-
-### Multiple Simultaneous Auctions
-
-```julia
-# Define multiple auction configurations
-auctions = [
-    ("GOLD_AUCTION", 
-     AuctionConfig(supply = 100.0, reserve_price = 1500.0)),
-    ("SILVER_AUCTION", 
-     AuctionConfig(supply = 1000.0, reserve_price = 25.0)),
-    ("COPPER_AUCTION", 
-     AuctionConfig(supply = 5000.0, reserve_price = 3.0))
-]
-
-# Collect bids for each auction
-all_bids = Dict(
-    "GOLD_AUCTION" => [
-        Bid("bank1", 1600.0, 30.0),
-        Bid("bank2", 1580.0, 40.0),
-        Bid("bank3", 1550.0, 50.0)
-    ],
-    "SILVER_AUCTION" => [
-        Bid("trader1", 27.0, 300.0),
-        Bid("trader2", 26.5, 400.0),
-        Bid("trader3", 26.0, 500.0)
-    ],
-    "COPPER_AUCTION" => [
-        Bid("industrial1", 3.5, 2000.0),
-        Bid("industrial2", 3.4, 2500.0),
-        Bid("industrial3", 3.3, 1500.0)
-    ]
-)
-
-# Process all auctions
-results = Dict{String, AuctionResult}()
-for (name, config) in auctions
-    bids = all_bids[name]
-    results[name] = run_auction(bids, config)
-    println("\$name cleared at \$\$(results[name].clearing_price)")
-end
-```
+Elastic supply increases with price, finding equilibrium where supply meets demand dynamically.
 
 ## Working with Bid Objects
 
-### Creating and Validating Bids
+### Creating Valid Bids
+Bids contain essential trading information:
 
 ```julia
-# Create a bid with full parameters
+# Create detailed bid
 bid = Bid(
     bidder_id = "trader_123",
     price = 50.0,
@@ -148,293 +100,289 @@ bid = Bid(
     timestamp = now(),
     metadata = Dict(
         "account_type" => "institutional",
-        "order_type" => "AON",  # All or None
-        "max_fees" => 2.50
+        "order_type" => "AON"  # All or None
     )
 )
 
 # Validate bid
 function validate_bid(bid::Bid, config::AuctionConfig)
-    errors = String[]
-    
-    if bid.price < config.reserve_price
-        push!(errors, "Bid below reserve price")
-    end
-    
-    if bid.quantity <= 0
-        push!(errors, "Invalid quantity")
-    end
-    
-    if bid.price <= 0
-        push!(errors, "Invalid price")
-    end
-    
-    return length(errors) == 0, errors
+    bid.price >= config.reserve_price || 
+        return false, "Below reserve"
+    bid.quantity > 0 || 
+        return false, "Invalid quantity"
+    return true, "Valid"
 end
 
-is_valid, errors = validate_bid(bid, config)
-if !is_valid
-    println("Bid validation failed: ", join(errors, ", "))
+valid, message = validate_bid(bid, config)
+```
+
+## Batch Auction Processing
+
+### Multiple Simultaneous Auctions
+Process different asset auctions concurrently:
+
+```julia
+# Define multiple auctions
+auctions = [
+    ("GOLD", AuctionConfig(supply=100.0, reserve_price=1500.0)),
+    ("SILVER", AuctionConfig(supply=1000.0, reserve_price=25.0))
+]
+
+# Collect bids
+all_bids = Dict(
+    "GOLD" => [
+        Bid("bank1", 1600.0, 30.0),
+        Bid("bank2", 1580.0, 40.0)
+    ],
+    "SILVER" => [
+        Bid("trader1", 27.0, 300.0),
+        Bid("trader2", 26.5, 400.0)
+    ]
+)
+
+# Process all auctions
+results = Dict()
+for (name, config) in auctions
+    results[name] = run_auction(all_bids[name], config)
+    println("$name: $(results[name].clearing_price)")
 end
 ```
 
 ## Monitoring Auction Metrics
 
-### Real-time Metrics Collection
+### Real-time Analysis
+Track key performance indicators during auctions:
 
 ```julia
-# Track auction metrics
 struct AuctionMetrics
     bid_count::Int
     total_demand::Float64
     average_price::Float64
     price_variance::Float64
-    participation_rate::Float64
 end
 
 function calculate_metrics(bids::Vector{Bid})
     prices = [b.price for b in bids]
     quantities = [b.quantity for b in bids]
     
-    return AuctionMetrics(
-        bid_count = length(bids),
-        total_demand = sum(quantities),
-        average_price = mean(prices),
-        price_variance = var(prices),
-        participation_rate = length(unique(b.bidder_id for b in bids)) / 100
+    AuctionMetrics(
+        length(bids),
+        sum(quantities),
+        mean(prices),
+        var(prices)
     )
 end
 
-# Monitor auction in real-time
 metrics = calculate_metrics(bids)
-println("Current auction metrics:")
-println("  Bids received: \$(metrics.bid_count)")
-println("  Total demand: \$(metrics.total_demand)")
-println("  Avg bid price: \$\$(round(metrics.average_price, digits=2))")
+println("Bids: $(metrics.bid_count)")
+println("Demand: $(metrics.total_demand)")
+println("Avg price: $(round(metrics.average_price, digits=2))")
 ```
 
 ## Error Handling
 
-### Graceful Error Management
+### Safe Execution Pattern
+Handle errors gracefully in production:
 
 ```julia
-# Wrap auction execution with error handling
 function safe_run_auction(bids, config)
     try
         # Validate inputs
-        if isempty(bids)
-            return ErrorResult("No bids received")
-        end
+        isempty(bids) && 
+            return ErrorResult("No bids")
+        config.supply > 0 || 
+            return ErrorResult("Invalid supply")
         
-        if config.supply <= 0
-            return ErrorResult("Invalid supply configuration")
-        end
-        
-        # Run auction
+        # Execute auction
         result = run_auction(bids, config)
         
-        # Validate result
-        if result.clearing_price < config.reserve_price
-            return ErrorResult("Auction failed to meet reserve")
-        end
+        # Check reserve
+        result.clearing_price >= config.reserve_price ||
+            return ErrorResult("Below reserve")
         
         return result
-        
     catch e
-        # Log error
         @error "Auction failed" exception=e
         return ErrorResult(string(e))
     end
 end
 
-# Use safe wrapper
 result = safe_run_auction(bids, config)
-if isa(result, ErrorResult)
-    println("Auction error: \$(result.message)")
-else
-    println("Auction successful at \$\$(result.clearing_price)")
-end
+isa(result, ErrorResult) ?
+    println("Error: $(result.message)") :
+    println("Success: $(result.clearing_price)")
 ```
-
-## Integration Examples
-
-### REST API Integration
-
-```julia
-using HTTP
-using JSON
-
-# Submit bid via API
-function submit_bid_api(bid::Bid, auction_id::String)
-    url = "http://localhost:8080/api/auctions/\$(auction_id)/bids"
-    
-    payload = JSON.json(Dict(
-        "bidder_id" => bid.bidder_id,
-        "price" => bid.price,
-        "quantity" => bid.quantity
-    ))
-    
-    response = HTTP.post(
-        url,
-        ["Content-Type" => "application/json"],
-        payload
-    )
-    
-    return JSON.parse(String(response.body))
-end
-
-# Get auction results
-function get_auction_results(auction_id::String)
-    url = "http://localhost:8080/api/auctions/\$(auction_id)/results"
-    response = HTTP.get(url)
-    return JSON.parse(String(response.body))
-end
-```
-
-### WebSocket Real-time Updates
-
-```julia
-using WebSockets
-
-# Connect to auction updates
-WebSockets.open("ws://localhost:8080/ws/auctions") do ws
-    # Subscribe to auction
-    write(ws, JSON.json(Dict("action" => "subscribe", "auction_id" => "GOLD_001")))
-    
-    # Listen for updates
-    while !eof(ws)
-        data = String(read(ws))
-        update = JSON.parse(data)
-        
-        if update["type"] == "bid_received"
-            println("New bid: \$(update["price"]) for \$(update["quantity"])")
-        elseif update["type"] == "auction_cleared"
-            println("Auction cleared at \$(update["clearing_price"])")
-            break
-        end
-    end
-end
-```
-
-## Performance Testing
-
-### Simple Benchmark
-
-```julia
-using BenchmarkTools
-
-# Benchmark auction performance
-function benchmark_auction(num_bids::Int)
-    # Generate random bids
-    bids = [Bid("bidder_\$i", 
-                10.0 + 5.0 * rand(), 
-                100.0 * rand()) 
-            for i in 1:num_bids]
-    
-    config = AuctionConfig(
-        supply = num_bids * 30.0,
-        reserve_price = 10.0
-    )
-    
-    # Measure execution time
-    @benchmark run_auction(\$bids, \$config)
-end
-
-# Test with different sizes
-for n in [100, 1000, 10000]
-    println("Performance with \$n bids:")
-    display(benchmark_auction(n))
-    println()
-end
-```
-
-## Next Steps
-
-After mastering these basic examples:
-
-1. **Advanced Features** - See [Advanced Examples](advanced.md)
-2. **Performance Tuning** - See [Performance Guide](performance.md)
-3. **API Integration** - See [API Reference](../api/augmented.md)
-4. **Theory Deep Dive** - See [Auction Theory](../theory/overview.md)
 
 ## Common Patterns
 
-### Pattern 1: Reserve Price Enforcement
+### Reserve Price Enforcement
+Filter bids meeting minimum requirements:
 
 ```julia
 function enforce_reserve(bids, reserve_price)
     valid_bids = filter(b -> b.price >= reserve_price, bids)
-    if isempty(valid_bids)
-        throw(AuctionError("No bids meet reserve price"))
-    end
+    isempty(valid_bids) && 
+        throw(AuctionError("No valid bids"))
     return valid_bids
 end
 ```
 
-### Pattern 2: Bid Aggregation
+### Bid Aggregation
+Combine multiple bids from same bidder:
 
 ```julia
-function aggregate_bids_by_bidder(bids)
+function aggregate_by_bidder(bids)
     aggregated = Dict{String, Bid}()
+    
     for bid in bids
         if haskey(aggregated, bid.bidder_id)
-            # Combine bids from same bidder
             existing = aggregated[bid.bidder_id]
             aggregated[bid.bidder_id] = Bid(
                 bid.bidder_id,
-                max(existing.price, bid.price),  # Use highest price
-                existing.quantity + bid.quantity  # Sum quantities
+                max(existing.price, bid.price),
+                existing.quantity + bid.quantity
             )
         else
             aggregated[bid.bidder_id] = bid
         end
     end
-    return values(aggregated)
+    
+    return collect(values(aggregated))
 end
 ```
 
-### Pattern 3: Progressive Auction
+### Progressive Auctions
+Release supply in stages:
 
 ```julia
-function progressive_auction(total_supply, batches)
-    remaining = total_supply
+function progressive_auction(supply, stages)
+    remaining = supply
     results = []
     
-    for (i, batch_percent) in enumerate(batches)
-        batch_supply = total_supply * batch_percent
+    for (i, fraction) in enumerate(stages)
+        stage_supply = supply * fraction
         config = AuctionConfig(
-            supply = min(batch_supply, remaining),
-            reserve_price = 10.0 * (1 + i * 0.1)  # Increasing reserve
+            supply = min(stage_supply, remaining),
+            reserve_price = 10.0 * (1 + i * 0.1)
         )
         
         result = run_auction(current_bids, config)
         push!(results, result)
         
         remaining -= result.total_allocated
-        if remaining <= 0
-            break
-        end
+        remaining <= 0 && break
     end
     
     return results
 end
 ```
 
+## Performance Testing
+
+### Benchmarking
+Measure auction performance at scale:
+
+```julia
+using BenchmarkTools
+
+function benchmark_auction(n::Int)
+    bids = [Bid("b$i", 10+5*rand(), 100*rand()) 
+            for i in 1:n]
+    
+    config = AuctionConfig(
+        supply = n * 30.0,
+        reserve_price = 10.0
+    )
+    
+    @benchmark run_auction($bids, $config)
+end
+
+# Test scaling
+for n in [100, 1000, 10000]
+    println("$n bids:")
+    display(benchmark_auction(n))
+end
+```
+
+## Integration Examples
+
+### REST API Usage
+Submit bids programmatically:
+
+```julia
+using HTTP, JSON
+
+function submit_bid(bid::Bid, auction_id::String)
+    url = "http://api.auction.com/bids"
+    
+    payload = JSON.json(Dict(
+        "auction_id" => auction_id,
+        "bidder_id" => bid.bidder_id,
+        "price" => bid.price,
+        "quantity" => bid.quantity
+    ))
+    
+    response = HTTP.post(url,
+        ["Content-Type" => "application/json"],
+        payload)
+    
+    return JSON.parse(String(response.body))
+end
+```
+
+### WebSocket Updates
+Monitor auctions in real-time:
+
+```julia
+using WebSockets
+
+WebSockets.open("ws://auction.com/live") do ws
+    # Subscribe
+    write(ws, JSON.json(Dict(
+        "action" => "subscribe",
+        "auction" => "GOLD_001"
+    )))
+    
+    # Listen for updates
+    while !eof(ws)
+        update = JSON.parse(String(read(ws)))
+        
+        if update["type"] == "bid_received"
+            println("New bid: $(update["price"])")
+        elseif update["type"] == "cleared"
+            println("Cleared: $(update["price"])")
+            break
+        end
+    end
+end
+```
+
 ## Troubleshooting
 
-Common issues and solutions:
+### Common Issues
 
-1. **No clearing price found**
-   - Check if total demand exceeds supply
-   - Verify reserve price isn't too high
+**No clearing price found:**
+- Verify total demand exceeds supply
+- Check reserve price configuration
+- Ensure valid bid format
 
-2. **Unexpected allocations**
-   - Review tie-breaking rules
-   - Check bid timestamps
+**Unexpected allocations:**
+- Review tie-breaking rules
+- Check bid timestamps
+- Verify auction type
 
-3. **Performance issues**
-   - Consider batch processing
-   - Implement bid caching
-   - Use parallel processing for large auctions
+**Performance degradation:**
+- Implement bid caching
+- Use batch processing
+- Enable parallel execution
 
-For more help, see [Troubleshooting Guide](../troubleshooting.md)
+## Next Steps
+
+- [Advanced Examples](advanced.md): Complex configurations
+- [Performance Guide](performance.md): Optimization techniques
+- [API Reference](../api/augmented.md): Function documentation
+- [Theory Overview](../theory/overview.md): Academic foundations
+
+## Summary
+
+These examples demonstrate core auction functionality from simple uniform price to augmented mechanisms. The patterns shown handle common requirements including validation, aggregation, and error management. Use these building blocks to construct production auction systems.

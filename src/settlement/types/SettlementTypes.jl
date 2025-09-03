@@ -9,16 +9,27 @@ using Dates
 using UUIDs
 
 # Export all types
-export Price, Amount, AssetPair, ProtocolType,
-       SettlementTransaction, ExecutionPath, SettlementReceipt,
-       SettlementResult, SettlementMetrics, RouteSegment,
-       LiquidityPool, PoolReserves, MEVRisk, ProtectionStrategy,
-       CircuitBreakerState, SettlementStatus
+export Price,
+    Amount,
+    AssetPair,
+    ProtocolType,
+    SettlementTransaction,
+    ExecutionPath,
+    SettlementReceipt,
+    SettlementResult,
+    SettlementMetrics,
+    RouteSegment,
+    LiquidityPool,
+    PoolReserves,
+    MEVRisk,
+    ProtectionStrategy,
+    CircuitBreakerState,
+    SettlementStatus
 
 # Type aliases for clarity and flexibility
 const Price = Real
 const Amount = Real
-const AssetPair = Tuple{String, String}
+const AssetPair = Tuple{String,String}
 
 # Protocol enumeration
 @enum ProtocolType begin
@@ -43,8 +54,8 @@ struct SettlementTransaction{T<:Real}
     deadline::DateTime
     sender::String
     receiver::String
-    metadata::Dict{Symbol, Any}
-    
+    metadata::Dict{Symbol,Any}
+
     function SettlementTransaction{T}(;
         id::UUID = uuid4(),
         asset_pair::AssetPair,
@@ -54,16 +65,13 @@ struct SettlementTransaction{T<:Real}
         deadline::DateTime = now() + Minute(5),
         sender::String = "",
         receiver::String = "",
-        metadata::Dict{Symbol, Any} = Dict{Symbol, Any}(),
+        metadata::Dict{Symbol,Any} = Dict{Symbol,Any}(),
     ) where {T<:Real}
         amount > 0 || throw(ArgumentError("Amount must be positive"))
-        0 ≤ max_slippage ≤ 1 || throw(
-            ArgumentError("Max slippage must be between 0 and 1")
-        )
+        0 ≤ max_slippage ≤ 1 || throw(ArgumentError("Max slippage must be between 0 and 1"))
         deadline > now() || throw(ArgumentError("Deadline must be in the future"))
-        
-        new(id, asset_pair, amount, is_buy, max_slippage,
-            deadline, sender, receiver, metadata)
+
+        new(id, asset_pair, amount, is_buy, max_slippage, deadline, sender, receiver, metadata)
     end
 end
 
@@ -137,12 +145,12 @@ Complete result of a settlement operation.
 """
 struct SettlementResult{T<:Real}
     transaction::SettlementTransaction{T}
-    receipt::Union{SettlementReceipt{T}, Nothing}
+    receipt::Union{SettlementReceipt{T},Nothing}
     metrics::SettlementMetrics
     execution_paths::Vector{ExecutionPath{T}}
     timestamp::DateTime
     success::Bool
-    error::Union{String, Nothing}
+    error::Union{String,Nothing}
 end
 
 """
@@ -158,7 +166,7 @@ mutable struct LiquidityPool{T<:Real}
     fee_tier::T
     liquidity::T
     last_update::DateTime
-    metadata::Dict{Symbol, Any}
+    metadata::Dict{Symbol,Any}
 end
 
 """
@@ -170,9 +178,9 @@ struct PoolReserves{T<:Real}
     reserve_a::T
     reserve_b::T
     # For Uniswap V3 concentrated liquidity
-    tick_lower::Union{Int, Nothing}
-    tick_upper::Union{Int, Nothing}
-    liquidity_active::Union{T, Nothing}
+    tick_lower::Union{Int,Nothing}
+    tick_upper::Union{Int,Nothing}
+    liquidity_active::Union{T,Nothing}
 end
 
 """

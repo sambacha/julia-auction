@@ -67,16 +67,16 @@ struct SettlementConfig
     fallback_threshold_ms::Float64
     max_retry_attempts::Int64
     circuit_breaker_threshold::Float64
-    
+
     # CFMM Bridge config
     max_hops::Int64
     max_price_impact_bps::Float64
     gas_price_gwei::Float64
-    
+
     # Auction config
     reveal_delay_ms::Int64
     min_participants::Int64
-    
+
     # Default constructor with sensible defaults
     function SettlementConfig(;
         max_auction_duration_ms = 100,
@@ -89,7 +89,7 @@ struct SettlementConfig
         max_price_impact_bps = 100.0,
         gas_price_gwei = 30.0,
         reveal_delay_ms = 20,
-        min_participants = 2
+        min_participants = 2,
     )
         new(
             max_auction_duration_ms,
@@ -102,7 +102,7 @@ struct SettlementConfig
             max_price_impact_bps,
             gas_price_gwei,
             reveal_delay_ms,
-            min_participants
+            min_participants,
         )
     end
 end
@@ -112,48 +112,38 @@ mutable struct SettlementSystem{T}
     config::SettlementConfig
     orchestrator::SettlementOrchestrator.Orchestrator{T}
     cfmm_bridge::CFMMBridge.Bridge{T}
-    phantom_auction::Union{PhantomAuction, Nothing}  # Would be proper auction type
-    
+    phantom_auction::Union{PhantomAuction,Nothing}  # Would be proper auction type
+
     # Metrics
     total_settlements::Int64
     successful_settlements::Int64
     total_improvement_bps::Float64
-    
-    function SettlementSystem{T}(config::SettlementConfig) where T
+
+    function SettlementSystem{T}(config::SettlementConfig) where {T}
         # Create orchestrator
         orch_config = SettlementOrchestrator.OrchestratorConfig(
             config.max_auction_duration_ms,
             config.min_improvement_bps,
             config.fallback_threshold_ms,
             config.max_retry_attempts,
-            config.circuit_breaker_threshold
+            config.circuit_breaker_threshold,
         )
         orchestrator = SettlementOrchestrator.Orchestrator{T}(orch_config)
-        
+
         # Create CFMM bridge
-        bridge_config = CFMMBridge.BridgeConfig(
-            config.max_hops,
-            config.max_price_impact_bps,
-            config.gas_price_gwei
-        )
+        bridge_config = CFMMBridge.BridgeConfig(config.max_hops, config.max_price_impact_bps, config.gas_price_gwei)
         cfmm_bridge = CFMMBridge.Bridge{T}(bridge_config)
-        
+
         # Phantom auction will be created per request
-        
-        new{T}(
-            config,
-            orchestrator,
-            cfmm_bridge,
-            nothing,
-            0, 0, 0.0
-        )
+
+        new{T}(config, orchestrator, cfmm_bridge, nothing, 0, 0, 0.0)
     end
 end
 
 # Initialize the complete settlement system
 function initialize_settlement_system(config::SettlementConfig = SettlementConfig(); T = Float64)
     system = SettlementSystem{T}(config)
-    
+
     # Wire up dependencies
     # In production, would initialize with real components
     SettlementOrchestrator.initialize!(
@@ -162,12 +152,12 @@ function initialize_settlement_system(config::SettlementConfig = SettlementConfi
         PhantomAuction,  # Module reference for auction creation
         nothing,  # State manager placeholder
         nothing,  # Atomic settler placeholder
-        nothing   # Latency monitor placeholder
+        nothing,   # Latency monitor placeholder
     )
-    
+
     # Initialize CFMM router connection
     # CFMMBridge.initialize_router!(system.cfmm_bridge, cfmm_router_instance)
-    
+
     return system
 end
 
@@ -178,12 +168,11 @@ function create_settlement_request(;
     amount_in::T,
     slippage::T = T(0.01),
     deadline_minutes::Int = 5,
-    user_address::String = "0x0000"
-) where T <: Real
-    
+    user_address::String = "0x0000",
+) where {T<:Real}
     id = uuid4()
     deadline = now() + Minute(deadline_minutes)
-    
+
     return SettlementOrchestrator.SettlementRequest(
         id,
         token_in,
@@ -191,24 +180,24 @@ function create_settlement_request(;
         T(amount_in),
         T(slippage),
         deadline,
-        user_address
+        user_address,
     )
 end
 
 # Process a settlement through the system
-function process_settlement(system::SettlementSystem{T}, request::SettlementOrchestrator.SettlementRequest{T}) where T
+function process_settlement(system::SettlementSystem{T}, request::SettlementOrchestrator.SettlementRequest{T}) where {T}
     # Update metrics
     system.total_settlements += 1
-    
+
     # Process through orchestrator
     result = SettlementOrchestrator.process_settlement!(system.orchestrator, request)
-    
+
     # Update metrics based on result
     if result.status == SettlementOrchestrator.COMPLETED
         system.successful_settlements += 1
         system.total_improvement_bps += result.improvement_bps
     end
-    
+
     return result
 end
 
@@ -219,17 +208,16 @@ end
 
 # Get system metrics
 function get_system_metrics(system::SettlementSystem)
-    success_rate = system.total_settlements > 0 ? 
-        system.successful_settlements / system.total_settlements : 0.0
-    
-    avg_improvement = system.successful_settlements > 0 ?
-        system.total_improvement_bps / system.successful_settlements : 0.0
-    
+    success_rate = system.total_settlements > 0 ? system.successful_settlements / system.total_settlements : 0.0
+
+    avg_improvement =
+        system.successful_settlements > 0 ? system.total_improvement_bps / system.successful_settlements : 0.0
+
     return (
         total = system.total_settlements,
         successful = system.successful_settlements,
         success_rate = success_rate,
-        avg_improvement_bps = avg_improvement
+        avg_improvement_bps = avg_improvement,
     )
 end
 
@@ -243,20 +231,16 @@ function simulate_settlement_flow(; amount = 1000.0, tokens = (1, 2))
     # Initialize system
     config = SettlementConfig()
     system = initialize_settlement_system(config; T = Float64)
-    
+
     # Create request
-    request = create_settlement_request(
-        token_in = tokens[1],
-        token_out = tokens[2],
-        amount_in = amount,
-        slippage = 0.01
-    )
-    
+    request =
+        create_settlement_request(token_in = tokens[1], token_out = tokens[2], amount_in = amount, slippage = 0.01)
+
     @info "Processing settlement request" request_id=request.id
-    
+
     # Process settlement
     result = process_settlement(system, request)
-    
+
     # Display results
     @info "Settlement Results"
     @info "Settlement status" status=result.status
@@ -267,13 +251,13 @@ function simulate_settlement_flow(; amount = 1000.0, tokens = (1, 2))
     end
     @info "Amount out" amount=result.amount_out
     @info "Execution time" time_ms=result.execution_time_ms
-    
+
     # Show metrics
     metrics = get_system_metrics(system)
     @info "System Metrics"
-    @info "System success rate" success_rate_percent=round(metrics.success_rate * 100, digits=1)
-    @info "Average improvement" avg_improvement_bps=round(metrics.avg_improvement_bps, digits=2)
-    
+    @info "System success rate" success_rate_percent=round(metrics.success_rate * 100, digits = 1)
+    @info "Average improvement" avg_improvement_bps=round(metrics.avg_improvement_bps, digits = 2)
+
     return result
 end
 

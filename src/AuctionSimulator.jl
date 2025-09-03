@@ -31,7 +31,7 @@ using Statistics
 # Define more specific statistics types for better performance
 abstract type StatisticsValue end
 struct NumericStat <: StatisticsValue
-    value::Union{Float64, Int64}
+    value::Union{Float64,Int64}
 end
 struct StringStat <: StatisticsValue
     value::String
@@ -40,14 +40,14 @@ struct BoolStat <: StatisticsValue
     value::Bool
 end
 struct VectorStat <: StatisticsValue
-    value::Union{Vector{Float64}, Vector{Int64}}
+    value::Union{Vector{Float64},Vector{Int64}}
 end
 struct DateTimeStat <: StatisticsValue
     value::DateTime
 end
 struct NullStat <: StatisticsValue end
 
-const StatisticsDict = Dict{String, StatisticsValue}
+const StatisticsDict = Dict{String,StatisticsValue}
 
 # Export abstract types
 export AbstractBidder, AbstractAuction, AbstractBiddingStrategy
@@ -139,16 +139,12 @@ Bidder(id, valuation, strategy)
 bidder = Bidder(1, 100.0, TruthfulStrategy())
 ```
 """
-struct Bidder{S <: AbstractBiddingStrategy} <: AbstractBidder
+struct Bidder{S<:AbstractBiddingStrategy} <: AbstractBidder
     id::Int
     valuation::Float64
     strategy::S
-    
-    function Bidder(
-        id::Int,
-        valuation::Float64,
-        strategy::S
-    ) where {S <: AbstractBiddingStrategy}
+
+    function Bidder(id::Int, valuation::Float64, strategy::S) where {S<:AbstractBiddingStrategy}
         if id <= 0
             throw(ArgumentError("Bidder ID must be positive"))
         end
@@ -184,7 +180,7 @@ struct Bid
     bidder_id::Int
     value::Float64
     timestamp::Float64
-    
+
     function Bid(bidder_id::Int, value::Float64, timestamp::Float64)
         if bidder_id <= 0
             throw(ArgumentError("Bidder ID must be positive"))
@@ -225,16 +221,20 @@ result = AuctionResult(
 )
 ```
 """
-struct AuctionResult{T <: AbstractAuction}
+struct AuctionResult{T<:AbstractAuction}
     auction_type::T
-    winner_id::Union{Int, Nothing}
+    winner_id::Union{Int,Nothing}
     winning_price::Float64
     all_bids::Vector{Bid}
     statistics::StatisticsDict
-    
-    function AuctionResult(auction_type::T, winner_id::Union{Int, Nothing}, 
-                          winning_price::Float64, all_bids::Vector{Bid}, 
-                          statistics::StatisticsDict) where {T <: AbstractAuction}
+
+    function AuctionResult(
+        auction_type::T,
+        winner_id::Union{Int,Nothing},
+        winning_price::Float64,
+        all_bids::Vector{Bid},
+        statistics::StatisticsDict,
+    ) where {T<:AbstractAuction}
         if winning_price < 0
             throw(ArgumentError("Winning price must be non-negative"))
         end
@@ -336,8 +336,7 @@ get_statistics(result::AuctionResult) = result.statistics
 Custom display format for Bidder objects.
 """
 function Base.show(io::IO, bidder::Bidder)
-    print(io, "Bidder(id=$(bidder.id), valuation=$(bidder.valuation), " *
-              "strategy=$(typeof(bidder.strategy)))")
+    print(io, "Bidder(id=$(bidder.id), valuation=$(bidder.valuation), " * "strategy=$(typeof(bidder.strategy)))")
 end
 
 """
@@ -346,8 +345,7 @@ end
 Custom display format for Bid objects.
 """
 function Base.show(io::IO, bid::Bid)
-    print(io, "Bid(bidder_id=$(bid.bidder_id), value=$(bid.value), " *
-              "timestamp=$(bid.timestamp))")
+    print(io, "Bid(bidder_id=$(bid.bidder_id), value=$(bid.value), " * "timestamp=$(bid.timestamp))")
 end
 
 """
@@ -357,9 +355,12 @@ Custom display format for AuctionResult objects.
 """
 function Base.show(io::IO, result::AuctionResult)
     winner_str = result.winner_id === nothing ? "None" : string(result.winner_id)
-    print(io, "AuctionResult(winner_id=$(winner_str), " *
-              "winning_price=$(result.winning_price), " *
-              "num_bids=$(length(result.all_bids)))")
+    print(
+        io,
+        "AuctionResult(winner_id=$(winner_str), " *
+        "winning_price=$(result.winning_price), " *
+        "num_bids=$(length(result.all_bids)))",
+    )
 end
 
 """
@@ -388,11 +389,11 @@ Sort bids by value (default) or timestamp.
 # Returns
 - Sorted vector of Bid objects
 """
-function sort_bids(bids::Vector{Bid}; by_value::Bool=true, reverse::Bool=false)
+function sort_bids(bids::Vector{Bid}; by_value::Bool = true, reverse::Bool = false)
     if by_value
-        return sort(bids, by=get_value, rev=reverse)
+        return sort(bids, by = get_value, rev = reverse)
     else
-        return sort(bids, by=get_timestamp, rev=reverse)
+        return sort(bids, by = get_timestamp, rev = reverse)
     end
 end
 
@@ -414,8 +415,7 @@ function highest_bid(bids::Vector{Bid})
     # Find the bid with the highest value, using timestamp as tiebreaker (earliest wins)
     best_bid = bids[1]
     for bid in bids
-        if bid.value > best_bid.value || 
-           (bid.value == best_bid.value && bid.timestamp < best_bid.timestamp)
+        if bid.value > best_bid.value || (bid.value == best_bid.value && bid.timestamp < best_bid.timestamp)
             best_bid = bid
         end
     end
@@ -437,7 +437,7 @@ function second_highest_bid(bids::Vector{Bid})
     if length(bids) < 2
         return nothing
     end
-    sorted_bids = sort_bids(bids, reverse=true)
+    sorted_bids = sort_bids(bids, reverse = true)
     return sorted_bids[2]
 end
 
@@ -453,5 +453,33 @@ include("visualization/AuctionVisualizer.jl")  # Visualization tools
 # Re-export visualization module
 using .AuctionVisualizer
 export AuctionVisualizer
+
+# Auto-load animation system if available
+# This provides zero-code-change animation support
+function __init__()
+    # Check if Makie is available
+    animation_config_path = joinpath(@__DIR__, "../config/animation.toml")
+
+    if isfile(animation_config_path)
+        try
+            # Only load if Makie is available
+            @eval begin
+                include("visualization/animated/ConfigurableAnimator.jl")
+                using .ConfigurableAnimator
+
+                # Auto-setup based on configuration
+                if ConfigurableAnimator.setup_animations($animation_config_path)
+                    @info "Auction animations enabled (config: $($animation_config_path))"
+                end
+            end
+        catch e
+            if isa(e, ArgumentError) && occursin("Makie", string(e))
+                @info "Makie not installed. Animations disabled. Install with: ] add Makie GLMakie"
+            else
+                @warn "Failed to load animation system" error=e
+            end
+        end
+    end
+end
 
 end # module AuctionSimulator

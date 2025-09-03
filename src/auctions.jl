@@ -24,8 +24,8 @@ struct FirstPriceAuction <: AbstractAuction
     reserve_price::Float64
     num_units::Int
     tie_breaking::Symbol  # :random, :first_come, :highest_id
-    
-    function FirstPriceAuction(reserve_price::Float64=0.0, num_units::Int=1, tie_breaking::Symbol=:random)
+
+    function FirstPriceAuction(reserve_price::Float64 = 0.0, num_units::Int = 1, tie_breaking::Symbol = :random)
         reserve_price >= 0 || throw(ArgumentError("Reserve price must be non-negative"))
         num_units >= 1 || throw(ArgumentError("Number of units must be positive"))
         tie_breaking in [:random, :first_come, :highest_id] || throw(ArgumentError("Invalid tie-breaking rule"))
@@ -42,8 +42,8 @@ struct SecondPriceAuction <: AbstractAuction
     reserve_price::Float64
     num_units::Int
     tie_breaking::Symbol  # :random, :first_come, :highest_id
-    
-    function SecondPriceAuction(reserve_price::Float64=0.0, num_units::Int=1, tie_breaking::Symbol=:random)
+
+    function SecondPriceAuction(reserve_price::Float64 = 0.0, num_units::Int = 1, tie_breaking::Symbol = :random)
         reserve_price >= 0 || throw(ArgumentError("Reserve price must be non-negative"))
         num_units >= 1 || throw(ArgumentError("Number of units must be positive"))
         tie_breaking in [:random, :first_come, :highest_id] || throw(ArgumentError("Invalid tie-breaking rule"))
@@ -62,7 +62,7 @@ Bidder that always bids their true valuation.
 """
 struct TruthfulBidder <: AbstractBiddingStrategy
     valuation::Float64
-    
+
     function TruthfulBidder(valuation::Float64)
         valuation >= 0 || throw(ArgumentError("Valuation must be non-negative"))
         new(valuation)
@@ -77,7 +77,7 @@ Bidder that bids below their true valuation by a shading factor.
 struct ShadedBidder <: AbstractBiddingStrategy
     valuation::Float64
     shading_factor::Float64
-    
+
     function ShadedBidder(valuation::Float64, shading_factor::Float64)
         valuation >= 0 || throw(ArgumentError("Valuation must be non-negative"))
         0 <= shading_factor <= 1 || throw(ArgumentError("Shading factor must be between 0 and 1"))
@@ -93,7 +93,7 @@ Bidder that adds random noise to their base bid.
 struct RandomBidder <: AbstractBiddingStrategy
     base_strategy::AbstractBiddingStrategy
     noise_level::Float64
-    
+
     function RandomBidder(base_strategy::AbstractBiddingStrategy, noise_level::Float64)
         noise_level >= 0 || throw(ArgumentError("Noise level must be non-negative"))
         new(base_strategy, noise_level)
@@ -110,9 +110,13 @@ struct StrategicBidder <: AbstractBiddingStrategy
     expected_bidders::Int
     valuation_distribution::Symbol  # :uniform, :normal
     risk_aversion::Float64
-    
-    function StrategicBidder(valuation::Float64, expected_bidders::Int, 
-                           valuation_distribution::Symbol=:uniform, risk_aversion::Float64=0.0)
+
+    function StrategicBidder(
+        valuation::Float64,
+        expected_bidders::Int,
+        valuation_distribution::Symbol = :uniform,
+        risk_aversion::Float64 = 0.0,
+    )
         valuation >= 0 || throw(ArgumentError("Valuation must be non-negative"))
         expected_bidders >= 1 || throw(ArgumentError("Expected bidders must be positive"))
         valuation_distribution in [:uniform, :normal] || throw(ArgumentError("Invalid valuation distribution"))
@@ -175,32 +179,26 @@ function conduct_auction(auction::AbstractAuction, bidders::Vector{<:AbstractBid
         bid_amount = generate_bid(get_strategy(bidder), auction)
         push!(bids, Bid(get_id(bidder), bid_amount))
     end
-    
+
     # Validate bids
     validate_bids(bids, auction) || throw(ArgumentError("Invalid bids"))
-    
+
     # Determine winner(s)
     winner_info = determine_winner(bids, auction)
-    
+
     # Calculate payment(s)
     payment = calculate_payment(winner_info, bids, auction)
-    
+
     # Create result
     statistics = StatisticsDict(
         "num_bidders" => NumericStat(length(bidders)),
         "num_valid_bids" => NumericStat(length(bids)),
         "highest_bid" => NumericStat(isempty(bids) ? 0.0 : maximum(b.value for b in bids)),
         "revenue" => NumericStat(payment),
-        "efficiency" => NumericStat(calculate_efficiency(winner_info, bidders, auction))
+        "efficiency" => NumericStat(calculate_efficiency(winner_info, bidders, auction)),
     )
-    
-    return AuctionResult(
-        auction,
-        winner_info.winner_id,
-        payment,
-        bids,
-        statistics
-    )
+
+    return AuctionResult(auction, winner_info.winner_id, payment, bids, statistics)
 end
 
 """
@@ -211,18 +209,18 @@ Determine the winner of an auction based on the bids and auction rules.
 function determine_winner(bids::Vector{Bid}, auction::AbstractAuction)
     # Filter bids that meet reserve price
     valid_bids = filter(b -> b.value >= auction.reserve_price, bids)
-    
+
     if isempty(valid_bids)
-        return (winner_id=nothing, winning_bid=nothing)
+        return (winner_id = nothing, winning_bid = nothing)
     end
-    
+
     # Sort bids by value (descending)
-    sorted_bids = sort(valid_bids, by=b -> b.value, rev=true)
-    
+    sorted_bids = sort(valid_bids, by = b -> b.value, rev = true)
+
     # Handle ties
     highest_value = sorted_bids[1].value
     tied_bids = filter(b -> b.value == highest_value, sorted_bids)
-    
+
     if length(tied_bids) == 1
         winner_bid = tied_bids[1]
     else
@@ -237,8 +235,8 @@ function determine_winner(bids::Vector{Bid}, auction::AbstractAuction)
             winner_bid = tied_bids[1]  # Default
         end
     end
-    
-    return (winner_id=winner_bid.bidder_id, winning_bid=winner_bid)
+
+    return (winner_id = winner_bid.bidder_id, winning_bid = winner_bid)
 end
 
 """
@@ -250,15 +248,15 @@ function calculate_payment(winner_info, bids::Vector{Bid}, auction::AbstractAuct
     if winner_info.winner_id === nothing
         return 0.0
     end
-    
+
     if isa(auction, FirstPriceAuction)
         # Winner pays their bid
         return winner_info.winning_bid.value
     elseif isa(auction, SecondPriceAuction)
         # Winner pays second-highest bid
         valid_bids = filter(b -> b.value >= auction.reserve_price, bids)
-        sorted_bids = sort(valid_bids, by=b -> b.value, rev=true)
-        
+        sorted_bids = sort(valid_bids, by = b -> b.value, rev = true)
+
         if length(sorted_bids) >= 2
             return sorted_bids[2].value
         else
@@ -295,7 +293,7 @@ function calculate_efficiency(winner_info, bidders::Vector{<:AbstractBidder}, au
     if winner_info.winner_id === nothing
         return 0.0
     end
-    
+
     # Find the winner's valuation
     winner_valuation = 0.0
     for bidder in bidders
@@ -304,9 +302,9 @@ function calculate_efficiency(winner_info, bidders::Vector{<:AbstractBidder}, au
             break
         end
     end
-    
+
     # Calculate optimal allocation (highest valuation)
     optimal_valuation = maximum(get_valuation(b) for b in bidders)
-    
+
     return optimal_valuation > 0 ? winner_valuation / optimal_valuation : 1.0
 end

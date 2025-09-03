@@ -23,7 +23,7 @@ Test version of improvement bid structure for simulation.
 """
 struct ImprovementBid{T}
     bidder_id::String
-    token_pair::Tuple{Int64, Int64}
+    token_pair::Tuple{Int64,Int64}
     improved_price::T
     volume::T
     priority_fee::T
@@ -39,13 +39,13 @@ Test implementation of bid generator that uses random simulation.
 """
 mutable struct SimulatedGenerator <: AbstractBidGenerator
     bid_generation_rate::Float64  # Probability of generating bid per request
-    price_improvement_range::Tuple{Float64, Float64}  # Min/max improvement
-    volume_variation_range::Tuple{Float64, Float64}   # Volume multiplier range
-    
+    price_improvement_range::Tuple{Float64,Float64}  # Min/max improvement
+    volume_variation_range::Tuple{Float64,Float64}   # Volume multiplier range
+
     function SimulatedGenerator(;
         bid_generation_rate::Float64 = 0.3,  # 30% chance by default
-        price_improvement_range::Tuple{Float64, Float64} = (10.0, 50.0),  # 0.1-0.5% improvement
-        volume_variation_range::Tuple{Float64, Float64} = (0.8, 1.2)      # 80-120% of baseline
+        price_improvement_range::Tuple{Float64,Float64} = (10.0, 50.0),  # 0.1-0.5% improvement
+        volume_variation_range::Tuple{Float64,Float64} = (0.8, 1.2),      # 80-120% of baseline
     )
         new(bid_generation_rate, price_improvement_range, volume_variation_range)
     end
@@ -59,23 +59,26 @@ Uses random values within realistic ranges.
 
 **FOR TESTING ONLY**
 """
-function generate_simulated_bid(baseline_price::T, baseline_amount::T, 
-                               token_pair::Tuple{Int64, Int64},
-                               min_improvement_bps::Float64,
-                               max_improvement_bps::Float64) where T
+function generate_simulated_bid(
+    baseline_price::T,
+    baseline_amount::T,
+    token_pair::Tuple{Int64,Int64},
+    min_improvement_bps::Float64,
+    max_improvement_bps::Float64,
+) where {T}
     bidder_id = string("test_bidder_", rand(1:1000))
-    
+
     # Generate improvement within bounds
     min_improvement = min_improvement_bps / 10000
     max_improvement = max_improvement_bps / 10000
     improvement = min_improvement + rand() * (max_improvement - min_improvement)
-    
+
     improved_price = baseline_price * (one(T) + improvement)
     volume = baseline_amount * (T(0.8) + rand() * T(0.4))  # 80-120% of baseline
     priority_fee = volume * T(0.0001) * rand()  # Up to 1 bps
-    
+
     nonce = rand(Int64)
-    
+
     bid = ImprovementBid(
         bidder_id,
         token_pair,
@@ -84,12 +87,12 @@ function generate_simulated_bid(baseline_price::T, baseline_amount::T,
         priority_fee,
         UInt8[],  # Will be filled by commitment
         nonce,
-        now()
+        now(),
     )
-    
+
     # Add commitment hash
     commitment = create_commitment(bid)
-    
+
     return ImprovementBid(
         bid.bidder_id,
         bid.token_pair,
@@ -98,7 +101,7 @@ function generate_simulated_bid(baseline_price::T, baseline_amount::T,
         bid.priority_fee,
         commitment,
         bid.nonce,
-        bid.timestamp
+        bid.timestamp,
     )
 end
 
@@ -107,19 +110,18 @@ end
 
 Test implementation that generates random bids for simulation.
 """
-function BidGenerator.generate_bid(generator::SimulatedGenerator, 
-                                 request::ImprovementBidRequest{T}) where T
+function BidGenerator.generate_bid(generator::SimulatedGenerator, request::ImprovementBidRequest{T}) where {T}
     # Random chance of generating a bid
     if rand() > generator.bid_generation_rate
         return nothing
     end
-    
+
     return generate_simulated_bid(
         request.baseline_price,
         request.baseline_amount,
         request.token_pair,
         request.min_improvement_bps,
-        request.max_improvement_bps
+        request.max_improvement_bps,
     )
 end
 
@@ -128,7 +130,7 @@ end
 
 Create a commitment hash for a bid (test implementation).
 """
-function create_commitment(bid::ImprovementBid{T}) where T
+function create_commitment(bid::ImprovementBid{T}) where {T}
     data = string(bid.bidder_id, bid.token_pair, bid.improved_price, bid.volume, bid.nonce)
     return sha256(data)
 end
@@ -138,10 +140,12 @@ end
 
 Configure simulation parameters for testing different scenarios.
 """
-function configure_simulation_parameters!(generator::SimulatedGenerator;
-                                        bid_rate=nothing,
-                                        improvement_range=nothing,
-                                        volume_range=nothing)
+function configure_simulation_parameters!(
+    generator::SimulatedGenerator;
+    bid_rate = nothing,
+    improvement_range = nothing,
+    volume_range = nothing,
+)
     if bid_rate !== nothing
         generator.bid_generation_rate = bid_rate
     end

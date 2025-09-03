@@ -1,12 +1,18 @@
 # Post-CFMM Settlement API
 
-## Overview
+## Document Information
+**Module:** Settlement System
+**Purpose:** CFMM integration and price improvement
+**Status:** Under Development
 
-The Post-CFMM Settlement module provides integration between auction mechanisms and Constant Function Market Makers (CFMMs) for improved price discovery and execution.
+## Executive Summary
+
+The Post-CFMM Settlement module integrates auction mechanisms with Constant Function Market Makers. The system discovers prices through auctions then routes execution through optimal CFMM paths. Sub-100ms phantom auctions capture MEV as user surplus.
 
 ## Core Components
 
-### Settlement System
+### SettlementSystem
+The main orchestration component manages auction execution and CFMM routing:
 
 ```julia
 struct SettlementSystem
@@ -17,329 +23,299 @@ struct SettlementSystem
 end
 ```
 
-### Configuration
+### SettlementConfig
+Configuration parameters control system behavior:
 
 ```julia
 struct SettlementConfig
-    max_auction_duration_ms::Int64
-    min_improvement_bps::Float64
-    max_slippage_bps::Float64
-    enable_phantom::Bool
-    cfmm_endpoints::Vector{String}
-    retry_config::RetryConfig
+    max_auction_duration_ms::Int64    # Auction time limit
+    min_improvement_bps::Float64      # Minimum price improvement
+    max_slippage_bps::Float64         # Maximum allowed slippage
+    enable_phantom::Bool               # Enable phantom auctions
+    cfmm_endpoints::Vector{String}    # CFMM API endpoints
 end
 ```
 
-## Main Functions
+## Primary Functions
 
-### `initialize_settlement_system`
+### initialize_settlement_system
+Creates and configures a new settlement system instance.
 
 ```julia
 initialize_settlement_system(config::SettlementConfig) -> SettlementSystem
-
-Initialize the settlement system with specified configuration.
-
-# Arguments
-- `config::SettlementConfig`: System configuration
-
-# Returns
-- `SettlementSystem`: Initialized settlement system
-
-# Example
-system = initialize_settlement_system(SettlementConfig(
-    max_auction_duration_ms = 100,
-    min_improvement_bps = 10,
-    max_slippage_bps = 50,
-    enable_phantom = true
-))
 ```
 
-### `process_settlement`
+**Parameters:**
+- `config`: System configuration settings
+
+**Returns:**
+- Initialized settlement system ready for processing
+
+**Example:**
+```julia
+system = initialize_settlement_system(
+    SettlementConfig(
+        max_auction_duration_ms = 100,
+        min_improvement_bps = 10,
+        enable_phantom = true
+    )
+)
+```
+
+### process_settlement
+Executes a settlement request through auction and CFMM routing.
 
 ```julia
-process_settlement(system::SettlementSystem, request::SettlementRequest) -> SettlementResult
-
-Process a settlement request through auction and CFMM routing.
-
-# Arguments
-- `system::SettlementSystem`: Settlement system instance
-- `request::SettlementRequest`: Settlement parameters
-
-# Returns
-- `SettlementResult`: Settlement outcome with execution details
-
-# Example
-result = process_settlement(system, SettlementRequest(
-    asset_pair = "ETH/USDC",
-    amount = 100.0,
-    side = BUY,
-    max_slippage = 0.01
-))
+process_settlement(
+    system::SettlementSystem, 
+    request::SettlementRequest
+) -> SettlementResult
 ```
 
-### `execute_phantom_auction`
+**Parameters:**
+- `system`: Active settlement system
+- `request`: Settlement parameters and constraints
+
+**Returns:**
+- Settlement result with execution details and metrics
+
+**Process Flow:**
+1. Validate request parameters
+2. Run price discovery auction
+3. Calculate optimal CFMM route
+4. Execute through selected path
+5. Verify price improvement
+
+### execute_phantom_auction
+Runs synthetic auctions for price discovery without execution.
 
 ```julia
 execute_phantom_auction(
-    system::SettlementSystem, 
-    market_conditions::MarketConditions
+    system::SettlementSystem,
+    conditions::MarketConditions
 ) -> PhantomResult
+```
 
-Run a phantom auction for price discovery without execution.
+**Parameters:**
+- `system`: Settlement system instance
+- `conditions`: Current market state
 
-# Arguments
-- `system::SettlementSystem`: Settlement system
-- `market_conditions::MarketConditions`: Current market state
+**Returns:**
+- Discovered price and confidence metrics
 
-# Returns
-- `PhantomResult`: Synthetic auction results
-
-# Algorithm
-1. Generate synthetic bids based on market conditions
+**Algorithm:**
+1. Generate synthetic bids from market data
 2. Run auction simulation
 3. Compare with CFMM prices
-4. Return price improvement metrics
-```
+4. Calculate improvement potential
 
 ## CFMM Integration
 
-### `route_to_cfmm`
+### route_to_cfmm
+Finds optimal execution path through liquidity pools.
 
 ```julia
 route_to_cfmm(
     order::Order,
-    cfmm_pools::Vector{CFMMPool}
+    pools::Vector{CFMMPool}
 ) -> RoutingResult
-
-Find optimal routing through CFMM pools.
-
-# Arguments
-- `order::Order`: Order to execute
-- `cfmm_pools::Vector{CFMMPool}`: Available liquidity pools
-
-# Returns
-- `RoutingResult`: Optimal path and expected execution
-
-# Routing Algorithm
-1. Build liquidity graph
-2. Calculate pool depths
-3. Find optimal path (Bellman-Ford)
-4. Account for price impact
-5. Return execution path
 ```
 
-### `calculate_price_impact`
+**Routing Algorithm:**
+1. Build liquidity graph from available pools
+2. Calculate effective depths accounting for fees
+3. Apply Bellman-Ford for optimal path
+4. Estimate price impact along route
+5. Return execution instructions
+
+### calculate_price_impact
+Estimates trade impact on pool prices.
 
 ```julia
 calculate_price_impact(
     pool::CFMMPool,
-    trade_amount::Float64
+    amount::Float64
 ) -> Float64
-
-Calculate expected price impact for a trade.
-
-# Formula
-For constant product AMM (x * y = k):
-- Price impact = 1 - (y - ”y) / y
-- Where ”y = trade output amount
 ```
+
+**Constant Product Formula:**
+For AMM with reserves (x, y) and constant k:
+- Output: Î”y = y - (k / (x + Î”x))
+- Impact: 1 - ((y - Î”y) / y)
+- Effective price includes fee tier
 
 ## Monitoring Functions
 
-### `monitor_settlement_health`
+### monitor_settlement_health
+Tracks system health metrics in real-time.
 
 ```julia
 monitor_settlement_health(system::SettlementSystem) -> HealthStatus
-
-Monitor system health metrics.
-
-# Returns
-HealthStatus with:
-- `latency_p50`: Median latency
-- `latency_p99`: 99th percentile latency
-- `success_rate`: Settlement success percentage
-- `circuit_breaker_status`: Open/Closed/HalfOpen
 ```
 
-### `get_settlement_metrics`
+**Monitored Metrics:**
+- `latency_p50`: Median processing time
+- `latency_p99`: 99th percentile latency
+- `success_rate`: Successful settlement percentage
+- `breaker_status`: Circuit breaker state
+
+### get_settlement_metrics
+Retrieves performance statistics for analysis.
 
 ```julia
 get_settlement_metrics(
     system::SettlementSystem,
-    time_range::TimeRange
+    range::TimeRange
 ) -> SettlementMetrics
+```
 
-Retrieve settlement performance metrics.
-
-# Returns
+**Returned Statistics:**
 - Total volume processed
 - Average price improvement
-- Slippage statistics
-- Failed settlement count
-```
+- Slippage distribution
+- Failure categories
 
 ## Circuit Breaker
 
-### `circuit_breaker_status`
+### circuit_breaker_status
+Returns current breaker state for system protection.
 
 ```julia
 circuit_breaker_status(breaker::CircuitBreaker) -> BreakerStatus
-
-Check circuit breaker state.
-
-# States
-- `CLOSED`: Normal operation
-- `OPEN`: Failing, rejecting requests
-- `HALF_OPEN`: Testing recovery
 ```
 
-### `trip_circuit_breaker`
+**States:**
+- `CLOSED`: Normal operation
+- `OPEN`: Rejecting requests due to failures
+- `HALF_OPEN`: Testing recovery with limited traffic
+
+### trip_circuit_breaker
+Manually triggers circuit breaker for intervention.
 
 ```julia
 trip_circuit_breaker(breaker::CircuitBreaker, reason::String)
-
-Manually trip the circuit breaker.
-
-# Use Cases
-- Excessive failures detected
-- Manual intervention required
-- Downstream service unavailable
 ```
 
-## Types Reference
+**Trigger Conditions:**
+- Failure rate exceeds threshold
+- Downstream service unavailable
+- Manual maintenance required
+
+## Type Definitions
 
 ### Request Types
-
 ```julia
 struct SettlementRequest
-    request_id::String
-    asset_pair::String
-    amount::Float64
-    side::OrderSide
-    max_slippage::Float64
-    deadline::DateTime
-    metadata::Dict{String, Any}
+    request_id::String         # Unique identifier
+    asset_pair::String         # Trading pair
+    amount::Float64           # Trade size
+    side::OrderSide          # BUY or SELL
+    max_slippage::Float64    # Slippage tolerance
+    deadline::DateTime       # Execution deadline
 end
 
 struct Order
-    order_id::String
-    trader::String
-    asset_in::String
-    asset_out::String
-    amount_in::Float64
-    min_amount_out::Float64
-    deadline::DateTime
+    order_id::String         # Order identifier
+    trader::String          # Trader address
+    asset_in::String        # Input token
+    asset_out::String       # Output token
+    amount_in::Float64      # Input amount
+    min_amount_out::Float64 # Minimum output
 end
 ```
 
 ### Result Types
-
 ```julia
 struct SettlementResult
-    request_id::String
-    status::SettlementStatus
-    execution_price::Float64
-    executed_amount::Float64
-    price_improvement::Float64
-    execution_venue::String
-    gas_used::Int64
-    settlement_time::DateTime
+    request_id::String        # Request reference
+    status::SettlementStatus  # SUCCESS/FAILED/PARTIAL
+    execution_price::Float64  # Achieved price
+    executed_amount::Float64  # Filled amount
+    improvement_bps::Float64  # Price improvement
+    venue::String            # Execution venue
+    gas_used::Int64         # Gas consumption
 end
 
 struct PhantomResult
-    auction_id::String
-    discovered_price::Float64
-    market_price::Float64
-    price_improvement_bps::Float64
-    confidence_score::Float64
-    bid_participation::Int
+    auction_id::String       # Auction identifier
+    discovered_price::Float64 # Auction price
+    market_price::Float64    # CFMM price
+    improvement::Float64     # Improvement basis points
+    confidence::Float64      # Result confidence
 end
 ```
 
 ### Pool Types
-
 ```julia
 struct CFMMPool
-    pool_address::String
-    protocol::String  # "UniswapV2", "UniswapV3", etc.
-    token_a::String
-    token_b::String
-    reserve_a::Float64
-    reserve_b::Float64
-    fee_tier::Float64
-    liquidity::Float64
+    address::String         # Pool contract address
+    protocol::String        # UniswapV3, Curve, etc.
+    token_a::String        # First token
+    token_b::String        # Second token
+    reserve_a::Float64     # Token A reserves
+    reserve_b::Float64     # Token B reserves
+    fee_tier::Float64      # Trading fee percentage
 end
 ```
 
 ## Error Handling
 
 ### Settlement Errors
+The system defines specific error types for failure diagnosis:
 
 ```julia
 abstract type SettlementError <: Exception end
 
 struct InsufficientLiquidityError <: SettlementError
-    requested_amount::Float64
-    available_amount::Float64
+    requested::Float64     # Requested amount
+    available::Float64     # Available liquidity
 end
 
 struct SlippageExceededError <: SettlementError
-    max_slippage::Float64
-    actual_slippage::Float64
+    maximum::Float64       # Maximum allowed
+    actual::Float64        # Actual slippage
 end
 
-struct SettlementTimeoutError <: SettlementError
-    timeout_ms::Int64
-    elapsed_ms::Int64
+struct TimeoutError <: SettlementError
+    limit_ms::Int64       # Time limit
+    elapsed_ms::Int64     # Actual duration
 end
 ```
 
-## Configuration Examples
+## Configuration
 
-### Basic Configuration
+### Basic Setup
+Minimal configuration for development:
 
 ```toml
 [settlement]
 max_auction_duration_ms = 100
 min_improvement_bps = 10
-max_slippage_bps = 50
 enable_phantom = true
-
-[settlement.retry]
-max_attempts = 3
-base_delay_ms = 100
-max_delay_ms = 5000
 ```
 
-### Production Configuration
+### Production Setup
+Optimized settings for production deployment:
 
 ```toml
 [settlement]
 max_auction_duration_ms = 50
 min_improvement_bps = 5
 max_slippage_bps = 30
-enable_phantom = true
-
-[settlement.cfmm]
-endpoints = [
-    "https://api.uniswap.v3.example.com",
-    "https://api.sushiswap.example.com"
-]
-timeout_ms = 2000
 
 [settlement.circuit_breaker]
 failure_threshold = 5
 recovery_timeout_ms = 30000
-half_open_requests = 3
+
+[settlement.cfmm]
+endpoints = ["https://api.pool1.com", "https://api.pool2.com"]
+timeout_ms = 2000
 ```
 
 ## Usage Examples
 
-### Basic Settlement
-
+### Basic Settlement Flow
 ```julia
-using PostCFMMSettlement
-
 # Initialize system
 config = SettlementConfig(
     max_auction_duration_ms = 100,
@@ -347,7 +323,7 @@ config = SettlementConfig(
 )
 system = initialize_settlement_system(config)
 
-# Process settlement
+# Execute settlement
 request = SettlementRequest(
     asset_pair = "ETH/USDC",
     amount = 10.0,
@@ -356,44 +332,47 @@ request = SettlementRequest(
 )
 
 result = process_settlement(system, request)
-println("Executed at: \$(result.execution_price)")
-println("Price improvement: \$(result.price_improvement) bps")
+println("Price: $(result.execution_price)")
+println("Improvement: $(result.improvement_bps) bps")
 ```
 
-### With Monitoring
-
+### Health Monitoring
 ```julia
-# Monitor health
+# Check system health
 health = monitor_settlement_health(system)
-if health.circuit_breaker_status == OPEN
-    @warn "Circuit breaker is open!"
+if health.breaker_status == OPEN
+    @warn "System circuit breaker triggered"
 end
 
-# Get metrics
-metrics = get_settlement_metrics(
-    system,
-    TimeRange(now() - Hour(1), now())
-)
-println("Success rate: \$(metrics.success_rate)%")
+# Retrieve metrics
+metrics = get_settlement_metrics(system, last_hour)
+println("Success rate: $(metrics.success_rate)%")
+println("Median latency: $(metrics.latency_p50)ms")
 ```
 
-## Performance Considerations
+## Performance Optimization
 
-### Latency Optimization
-- Connection pooling for CFMM queries
+### Latency Reduction
+The system minimizes latency through:
+- Connection pooling for API calls
 - Parallel route calculation
-- Caching of pool states
+- State caching mechanisms
 - Pre-computed routing tables
 
-### Throughput
+### Throughput Scaling
+High throughput achieved via:
 - Batch settlement processing
-- Async CFMM interactions
-- Queue-based request handling
+- Asynchronous CFMM queries
+- Queue-based load balancing
 - Horizontal scaling support
 
-## See Also
+## Related Documentation
 
-- [Augmented Auctions API](augmented.md)
-- [Phantom Auctions API](phantom.md)
-- [Architecture Overview](../architecture.md)
-- [Performance Guide](../performance.md)
+- [Augmented Auctions](augmented.md): Core auction mechanisms
+- [Phantom Auctions](phantom.md): Synthetic price discovery
+- [Architecture Overview](../architecture.md): System design
+- [Performance Guide](../guides/performance.md): Optimization techniques
+
+## Summary
+
+The Post-CFMM Settlement API provides efficient integration between auction mechanisms and decentralized liquidity pools. Phantom auctions discover prices while optimal routing ensures best execution. The system captures MEV as user surplus through sub-100ms auction cycles.

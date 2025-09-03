@@ -48,12 +48,12 @@ export has_config, get_config_section, merge_configs
 export save_config, config_to_dict
 
 # Type definitions for configuration values
-const ConfigValue = Union{String, Int, Float64, Bool, Vector{String}, Vector{Int}, Vector{Float64}}
+const ConfigValue = Union{String,Int,Float64,Bool,Vector{String},Vector{Int},Vector{Float64}}
 
 # Configuration errors
 struct ConfigError <: Exception
     message::String
-    key::Union{String, Nothing}
+    key::Union{String,Nothing}
     value::Any
 end
 
@@ -66,12 +66,12 @@ Main configuration container that holds all auction system settings.
 Provides type-safe access to configuration values with validation.
 """
 mutable struct AuctionConfig
-    data::Dict{String, Any}
+    data::Dict{String,Any}
     environment::String
     config_path::String
     last_loaded::Float64
-    
-    function AuctionConfig(data::Dict{String, Any}, environment::String, config_path::String)
+
+    function AuctionConfig(data::Dict{String,Any}, environment::String, config_path::String)
         new(data, environment, config_path, time())
     end
 end
@@ -92,60 +92,58 @@ Applies environment variable overrides after loading base configuration.
 # Throws
 - `ConfigError`: If configuration loading or validation fails
 """
-function load_config(environment::Union{String, Nothing}=nothing, 
-                    config_dir::Union{String, Nothing}=nothing)::AuctionConfig
-    
+function load_config(
+    environment::Union{String,Nothing} = nothing,
+    config_dir::Union{String,Nothing} = nothing,
+)::AuctionConfig
+
     # Determine environment and config path
     env = environment !== nothing ? environment : get_environment()
     config_path = config_dir !== nothing ? config_dir : get_config_path()
-    
+
     @info "Loading auction configuration" environment=env config_path=config_path
-    
+
     try
         # Load and merge configuration files
         config_data = _load_config_files(config_path, env)
-        
+
         # Apply environment variable overrides
         config_data = apply_environment_overrides(config_data)
-        
+
         # Create and validate configuration
         config = _create_and_validate_config(config_data, env, config_path)
-        
+
         @info "Configuration loaded successfully" environment=env sections=length(config.data)
         return config
-        
+
     catch e
         _handle_config_load_error(e)
     end
 end
 
-function _load_config_files(config_path::String, env::String)::Dict{String, Any}
+function _load_config_files(config_path::String, env::String)::Dict{String,Any}
     # Load default configuration first
     default_file = joinpath(config_path, "default.toml")
     config_data = _load_default_config(default_file)
-    
+
     # Load environment-specific overrides if they exist
     config_data = _apply_environment_overrides(config_data, config_path, env)
-    
+
     return config_data
 end
 
-function _load_default_config(default_file::String)::Dict{String, Any}
+function _load_default_config(default_file::String)::Dict{String,Any}
     if !isfile(default_file)
         throw(ConfigError("Default configuration file not found", default_file, nothing))
     end
-    
+
     config_data = TOML.parsefile(default_file)
     @debug "Loaded default configuration" file=default_file sections=keys(config_data)
-    
+
     return config_data
 end
 
-function _apply_environment_overrides(
-    config_data::Dict{String, Any}, 
-    config_path::String, 
-    env::String
-)::Dict{String, Any}
+function _apply_environment_overrides(config_data::Dict{String,Any}, config_path::String, env::String)::Dict{String,Any}
     env_file = joinpath(config_path, "$(env).toml")
     if isfile(env_file)
         env_data = TOML.parsefile(env_file)
@@ -154,15 +152,11 @@ function _apply_environment_overrides(
     else
         @debug "No environment-specific config found" file=env_file
     end
-    
+
     return config_data
 end
 
-function _create_and_validate_config(
-    config_data::Dict{String, Any}, 
-    env::String, 
-    config_path::String
-)::AuctionConfig
+function _create_and_validate_config(config_data::Dict{String,Any}, env::String, config_path::String)::AuctionConfig
     config = AuctionConfig(config_data, env, config_path)
     validate_config(config)
     return config
@@ -217,15 +211,14 @@ bid_prob = get_config(config, "phantom_auction.bid_probability", Float64)
 timeout = get_config(config, "timeouts.auction_timeout_ms", Float64, 50.0)
 ```
 """
-function get_config(config::AuctionConfig, key::String, ::Type{T}; 
-                   default=nothing) where T <: ConfigValue
-    
+function get_config(config::AuctionConfig, key::String, ::Type{T}; default = nothing) where {T<:ConfigValue}
+
     # Split key into path components
     path = split(key, '.')
-    
+
     # Navigate through nested dictionaries
     current = config.data
-    for segment in path[1:end-1]
+    for segment in path[1:(end-1)]
         if !haskey(current, segment) || !isa(current[segment], Dict)
             if default !== nothing
                 return convert(T, default)
@@ -235,7 +228,7 @@ function get_config(config::AuctionConfig, key::String, ::Type{T};
         end
         current = current[segment]
     end
-    
+
     # Get final value
     final_key = path[end]
     if !haskey(current, final_key)
@@ -245,9 +238,9 @@ function get_config(config::AuctionConfig, key::String, ::Type{T};
             throw(ConfigError("Configuration key not found", key, current))
         end
     end
-    
+
     value = current[final_key]
-    
+
     # Type conversion and validation
     try
         return convert(T, value)
@@ -261,9 +254,9 @@ end
 
 Get a configuration value without type specification (returns Any).
 """
-function get_config(config::AuctionConfig, key::String; default=nothing)
+function get_config(config::AuctionConfig, key::String; default = nothing)
     try
-        return get_config(config, key, Any; default=default)
+        return get_config(config, key, Any; default = default)
     catch e
         if isa(e, ConfigError) && default !== nothing
             return default
@@ -288,21 +281,21 @@ This only affects the in-memory configuration, not the underlying files.
 """
 function set_config!(config::AuctionConfig, key::String, value)
     path = split(key, '.')
-    
+
     # Navigate/create nested structure
     current = config.data
-    for segment in path[1:end-1]
+    for segment in path[1:(end-1)]
         if !haskey(current, segment)
-            current[segment] = Dict{String, Any}()
+            current[segment] = Dict{String,Any}()
         elseif !isa(current[segment], Dict)
-            current[segment] = Dict{String, Any}()
+            current[segment] = Dict{String,Any}()
         end
         current = current[segment]
     end
-    
+
     # Set final value
     current[path[end]] = value
-    
+
     @debug "Configuration value updated" key=key value=value
 end
 
@@ -342,16 +335,16 @@ Get an entire configuration section as a dictionary.
 # Throws
 - `ConfigError`: If section is not found
 """
-function get_config_section(config::AuctionConfig, section::String)::Dict{String, Any}
+function get_config_section(config::AuctionConfig, section::String)::Dict{String,Any}
     if !haskey(config.data, section)
         throw(ConfigError("Configuration section not found", section, config.data))
     end
-    
+
     section_data = config.data[section]
     if !isa(section_data, Dict)
         throw(ConfigError("Configuration section is not a dictionary", section, section_data))
     end
-    
+
     return section_data
 end
 
@@ -368,7 +361,7 @@ Validate configuration values and constraints.
 """
 function validate_config(config::AuctionConfig)
     @debug "Validating configuration"
-    
+
     validations = [
         # Phantom auction validations
         ("phantom_auction.bid_probability", Float64, x -> 0.0 <= x <= 1.0, "Must be between 0.0 and 1.0"),
@@ -377,37 +370,42 @@ function validate_config(config::AuctionConfig)
         ("phantom_auction.max_improvement_bps", Float64, x -> x >= 0, "Must be non-negative"),
         ("phantom_auction.reveal_delay_ms", Float64, x -> x > 0, "Must be positive"),
         ("phantom_auction.min_participants", Int, x -> x >= 1, "Must be at least 1"),
-        
+
         # Coordinator validations
         ("coordinator.consensus_threshold", Float64, x -> 0.5 <= x <= 1.0, "Must be between 0.5 and 1.0"),
         ("coordinator.base_success_rate", Float64, x -> 0.0 <= x <= 1.0, "Must be between 0.0 and 1.0"),
         ("coordinator.timeout_seconds", Float64, x -> x > 0, "Must be positive"),
         ("coordinator.retry_count", Int, x -> x >= 0, "Must be non-negative"),
         ("coordinator.heartbeat_interval_seconds", Float64, x -> x > 0, "Must be positive"),
-        
+
         # Settlement validations
         ("settlement.base_gas_cost", Int, x -> x > 0, "Must be positive"),
         ("settlement.timeout_ms", Float64, x -> x > 0, "Must be positive"),
         ("settlement.max_retries", Int, x -> x >= 0, "Must be non-negative"),
-        
+
         # Circuit breaker validations
         ("circuit_breaker.failure_threshold", Int, x -> x > 0, "Must be positive"),
         ("circuit_breaker.recovery_threshold", Int, x -> x > 0, "Must be positive"),
         ("circuit_breaker.timeout_ms", Float64, x -> x > 0, "Must be positive"),
-        ("circuit_breaker.error_percentage_threshold", Float64, x -> 0.0 <= x <= 100.0, "Must be between 0.0 and 100.0"),
-        
+        (
+            "circuit_breaker.error_percentage_threshold",
+            Float64,
+            x -> 0.0 <= x <= 100.0,
+            "Must be between 0.0 and 100.0",
+        ),
+
         # Performance validations
         ("performance.p99_latency_target_ms", Float64, x -> x > 0, "Must be positive"),
         ("performance.p95_latency_target_ms", Float64, x -> x > 0, "Must be positive"),
         ("performance.max_acceptable_latency_ms", Float64, x -> x > 0, "Must be positive"),
-        
+
         # Resource validations
         ("resources.max_concurrent_auctions", Int, x -> x > 0, "Must be positive"),
         ("resources.max_pending_settlements", Int, x -> x > 0, "Must be positive"),
         ("resources.max_memory_usage_mb", Int, x -> x > 0, "Must be positive"),
         ("resources.thread_pool_size", Int, x -> x > 0, "Must be positive"),
     ]
-    
+
     for (key, type, validator, message) in validations
         try
             value = get_config(config, key, type)
@@ -422,14 +420,19 @@ function validate_config(config::AuctionConfig)
             end
         end
     end
-    
+
     # Cross-validation checks
     try
         min_improvement = get_config(config, "phantom_auction.min_improvement_bps", Float64)
         max_improvement = get_config(config, "phantom_auction.max_improvement_bps", Float64)
         if min_improvement > max_improvement
-            throw(ConfigError("min_improvement_bps must be <= max_improvement_bps", 
-                            "phantom_auction.min_improvement_bps", min_improvement))
+            throw(
+                ConfigError(
+                    "min_improvement_bps must be <= max_improvement_bps",
+                    "phantom_auction.min_improvement_bps",
+                    min_improvement,
+                ),
+            )
         end
     catch e
         if !isa(e, ConfigError) || e.key != "phantom_auction.min_improvement_bps"
@@ -438,13 +441,18 @@ function validate_config(config::AuctionConfig)
             rethrow(e)
         end
     end
-    
+
     try
         p95_target = get_config(config, "performance.p95_latency_target_ms", Float64)
         p99_target = get_config(config, "performance.p99_latency_target_ms", Float64)
         if p95_target > p99_target
-            throw(ConfigError("p95_latency_target_ms must be <= p99_latency_target_ms", 
-                            "performance.p95_latency_target_ms", p95_target))
+            throw(
+                ConfigError(
+                    "p95_latency_target_ms must be <= p99_latency_target_ms",
+                    "performance.p95_latency_target_ms",
+                    p95_target,
+                ),
+            )
         end
     catch e
         if !isa(e, ConfigError) || e.key != "performance.p95_latency_target_ms"
@@ -453,7 +461,7 @@ function validate_config(config::AuctionConfig)
             rethrow(e)
         end
     end
-    
+
     @debug "Configuration validation completed successfully"
 end
 
@@ -474,14 +482,14 @@ Get the configuration directory path. Defaults to "config" relative to project r
 function get_config_path()::String
     # Try to find project root by looking for Project.toml
     current_dir = pwd()
-    
+
     # Look for config directory in current path or parent paths
-    for _ in 1:5  # Limit search depth
+    for _ = 1:5  # Limit search depth
         config_dir = joinpath(current_dir, "config")
         if isdir(config_dir)
             return config_dir
         end
-        
+
         project_file = joinpath(current_dir, "Project.toml")
         if isfile(project_file)
             config_dir = joinpath(current_dir, "config")
@@ -489,20 +497,20 @@ function get_config_path()::String
                 return config_dir
             end
         end
-        
+
         parent_dir = dirname(current_dir)
         if parent_dir == current_dir  # Reached filesystem root
             break
         end
         current_dir = parent_dir
     end
-    
+
     # Fallback to hardcoded path if search fails
     fallback_path = joinpath(dirname(dirname(@__FILE__)), "..", "config")
     if isdir(fallback_path)
         return abspath(fallback_path)
     end
-    
+
     # Final fallback
     return joinpath(pwd(), "config")
 end
@@ -513,25 +521,19 @@ end
 Apply environment variable overrides to configuration data.
 Environment variables follow the pattern: AUCTION_SECTION_SUBSECTION_KEY
 """
-function apply_environment_overrides(config_data::Dict{String, Any})::Dict{String, Any}
+function apply_environment_overrides(config_data::Dict{String,Any})::Dict{String,Any}
     result = deepcopy(config_data)
     override_count = 0
-    
+
     for (env_key, env_value) in ENV
         if _should_process_env_var(env_key)
             key_parts = _parse_environment_key(env_key)
             if key_parts !== nothing
-                override_count = _apply_single_override(
-                    result, 
-                    env_key, 
-                    env_value, 
-                    key_parts, 
-                    override_count
-                )
+                override_count = _apply_single_override(result, env_key, env_value, key_parts, override_count)
             end
         end
     end
-    
+
     _log_override_summary(override_count)
     return result
 end
@@ -540,37 +542,37 @@ function _should_process_env_var(env_key::String)::Bool
     return startswith(env_key, "AUCTION_")
 end
 
-function _parse_environment_key(env_key::String)::Union{Vector{String}, Nothing}
+function _parse_environment_key(env_key::String)::Union{Vector{String},Nothing}
     remaining_key = env_key[9:end]  # Remove "AUCTION_" prefix
-    
+
     # Check for special multi-word sections first
     key_parts = _parse_special_sections(remaining_key)
     if key_parts !== nothing
         return key_parts
     end
-    
+
     # Default parsing: split by underscore
     return _parse_default_key(remaining_key)
 end
 
-function _parse_special_sections(remaining_key::String)::Union{Vector{String}, Nothing}
+function _parse_special_sections(remaining_key::String)::Union{Vector{String},Nothing}
     special_sections = [
         ("PHANTOM_AUCTION_", "phantom_auction", 17),
         ("CIRCUIT_BREAKER_", "circuit_breaker", 17),
-        ("AUCTION_MECHANICS_", "auction_mechanics", 19)
+        ("AUCTION_MECHANICS_", "auction_mechanics", 19),
     ]
-    
+
     for (prefix, section, prefix_length) in special_sections
         if startswith(remaining_key, prefix)
             final_key = lowercase(remaining_key[prefix_length:end])
             return [section, final_key]
         end
     end
-    
+
     return nothing
 end
 
-function _parse_default_key(remaining_key::String)::Union{Vector{String}, Nothing}
+function _parse_default_key(remaining_key::String)::Union{Vector{String},Nothing}
     parts = split(remaining_key, '_')
     if length(parts) >= 2
         return map(lowercase, parts)
@@ -579,20 +581,20 @@ function _parse_default_key(remaining_key::String)::Union{Vector{String}, Nothin
 end
 
 function _apply_single_override(
-    result::Dict{String, Any}, 
-    env_key::String, 
-    env_value::String, 
-    key_parts::Vector{String}, 
-    override_count::Int
+    result::Dict{String,Any},
+    env_key::String,
+    env_value::String,
+    key_parts::Vector{String},
+    override_count::Int,
 )::Int
     # Parse value with type inference
     parsed_value = parse_env_value(env_value)
-    
+
     # Set nested value
     set_nested_value!(result, key_parts, parsed_value)
-    
+
     @debug "Applied environment override" env_key=env_key config_key=join(key_parts, ".") value=parsed_value
-    
+
     return override_count + 1
 end
 
@@ -612,7 +614,7 @@ function parse_env_value(value::String)
     if lowercase(value) in ["true", "false"]
         return lowercase(value) == "true"
     end
-    
+
     # Try integer
     if occursin(r"^-?\d+$", value)
         try
@@ -621,7 +623,7 @@ function parse_env_value(value::String)
             # Fall through to string
         end
     end
-    
+
     # Try float
     if occursin(r"^-?\d+\.?\d*$", value)
         try
@@ -630,7 +632,7 @@ function parse_env_value(value::String)
             # Fall through to string
         end
     end
-    
+
     # Return as string
     return value
 end
@@ -640,20 +642,20 @@ end
 
 Set a nested dictionary value using an array of keys.
 """
-function set_nested_value!(dict::Dict{String, Any}, keys::Vector, value)
+function set_nested_value!(dict::Dict{String,Any}, keys::Vector, value)
     current = dict
-    
+
     # Navigate to parent of target key
-    for key in keys[1:end-1]
+    for key in keys[1:(end-1)]
         key_str = lowercase(String(key))
         if !haskey(current, key_str)
-            current[key_str] = Dict{String, Any}()
+            current[key_str] = Dict{String,Any}()
         elseif !isa(current[key_str], Dict)
-            current[key_str] = Dict{String, Any}()
+            current[key_str] = Dict{String,Any}()
         end
         current = current[key_str]
     end
-    
+
     # Set final value
     final_key = lowercase(String(keys[end]))
     current[final_key] = value
@@ -664,9 +666,9 @@ end
 
 Recursively merge two configuration dictionaries, with override taking precedence.
 """
-function merge_configs(base::Dict{String, Any}, override::Dict{String, Any})::Dict{String, Any}
+function merge_configs(base::Dict{String,Any}, override::Dict{String,Any})::Dict{String,Any}
     result = deepcopy(base)
-    
+
     for (key, value) in override
         if haskey(result, key) && isa(result[key], Dict) && isa(value, Dict)
             result[key] = merge_configs(result[key], value)
@@ -674,7 +676,7 @@ function merge_configs(base::Dict{String, Any}, override::Dict{String, Any})::Di
             result[key] = deepcopy(value)
         end
     end
-    
+
     return result
 end
 
@@ -699,7 +701,7 @@ end
 
 Convert configuration object to a plain dictionary.
 """
-function config_to_dict(config::AuctionConfig)::Dict{String, Any}
+function config_to_dict(config::AuctionConfig)::Dict{String,Any}
     return deepcopy(config.data)
 end
 

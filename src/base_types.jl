@@ -13,8 +13,8 @@ struct Bid
     amount::Float64
     quantity::Int
     timestamp::DateTime
-    
-    Bid(bidder_id, amount, quantity=1) = new(bidder_id, amount, quantity, now())
+
+    Bid(bidder_id, amount, quantity = 1) = new(bidder_id, amount, quantity, now())
 end
 
 # Auction result structure
@@ -24,11 +24,11 @@ struct AuctionResult
     winning_bid::Float64
     payment::Float64
     revenue::Float64
-    allocations::Dict{Int, Int}
-    payments::Dict{Int, Float64}
+    allocations::Dict{Int,Int}
+    payments::Dict{Int,Float64}
     all_bids::Vector{Bid}
     timestamp::DateTime
-    
+
     # Constructor for simple single-winner auctions
     AuctionResult(auction_type, winner, winning_bid, payment, all_bids) = new(
         auction_type,
@@ -39,9 +39,9 @@ struct AuctionResult
         Dict(winner => 1),
         Dict(winner => payment),
         all_bids,
-        now()
+        now(),
     )
-    
+
     # Constructor for multi-unit auctions
     AuctionResult(auction_type, allocations, payments, all_bids) = new(
         auction_type,
@@ -52,7 +52,7 @@ struct AuctionResult
         allocations,
         payments,
         all_bids,
-        now()
+        now(),
     )
 end
 

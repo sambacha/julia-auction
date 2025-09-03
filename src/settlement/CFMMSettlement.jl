@@ -72,24 +72,24 @@ include("orchestration/Orchestrator.jl")
 
 # Public exports
 export SettlementConfig,
-       SettlementOrchestrator,
-       SettlementTransaction,
-       SettlementResult,
-       MEVProtectionConfig,
-       RouteOptimizationConfig,
-       
-       # Functions
-       process_settlement,
-       validate_settlement,
-       estimate_gas_cost,
-       calculate_price_impact,
-       detect_mev_risk,
-       
-       # Monitoring
-       get_settlement_metrics,
-       get_circuit_breaker_status,
-       emergency_halt,
-       resume_operations
+    SettlementOrchestrator,
+    SettlementTransaction,
+    SettlementResult,
+    MEVProtectionConfig,
+    RouteOptimizationConfig,
+
+    # Functions
+    process_settlement,
+    validate_settlement,
+    estimate_gas_cost,
+    calculate_price_impact,
+    detect_mev_risk,
+
+    # Monitoring
+    get_settlement_metrics,
+    get_circuit_breaker_status,
+    emergency_halt,
+    resume_operations
 
 # Module initialization
 function __init__()
@@ -103,7 +103,7 @@ function _precompile_hot_paths()
     # Precompile common operations
     config = SettlementConfig()
     orchestrator = SettlementOrchestrator(config)
-    
+
     # Trigger compilation of critical paths
     tx = SettlementTransaction(
         id = uuid4(),
@@ -112,7 +112,7 @@ function _precompile_hot_paths()
         max_slippage = 0.01,
         deadline = now() + Minute(5),
     )
-    
+
     try
         validate_settlement(orchestrator, tx)
         estimate_gas_cost(orchestrator, tx)

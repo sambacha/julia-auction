@@ -43,7 +43,7 @@ struct SettlementResult{T}
     request_id::UUID
     status::SettlementStatus
     cfmm_price::T
-    improved_price::Union{T, Nothing}
+    improved_price::Union{T,Nothing}
     amount_out::T
     improvement_bps::Float64
     execution_time_ms::Float64
@@ -53,25 +53,29 @@ end
 # Main orchestrator managing settlement lifecycle
 mutable struct Orchestrator{T}
     config::OrchestratorConfig
-    cfmm_bridge::Union{CFMMBridge, Nothing}
-    phantom_auction::Union{PhantomAuction, Nothing}
-    state_manager::Union{StateManager, Nothing}
-    atomic_settler::Union{AtomicSettlement, Nothing}
-    latency_monitor::Union{LatencyMonitor, Nothing}
-    
-    active_settlements::Dict{UUID, SettlementRequest{T}}
-    settlement_status::Dict{UUID, Atomic{SettlementStatus}}
+    cfmm_bridge::Union{CFMMBridge,Nothing}
+    phantom_auction::Union{PhantomAuction,Nothing}
+    state_manager::Union{StateManager,Nothing}
+    atomic_settler::Union{AtomicSettlement,Nothing}
+    latency_monitor::Union{LatencyMonitor,Nothing}
+
+    active_settlements::Dict{UUID,SettlementRequest{T}}
+    settlement_status::Dict{UUID,Atomic{SettlementStatus}}
     circuit_breaker::Atomic{Bool}
     lock::SpinLock
-    
-    function Orchestrator{T}(config::OrchestratorConfig) where T
+
+    function Orchestrator{T}(config::OrchestratorConfig) where {T}
         new{T}(
             config,
-            nothing, nothing, nothing, nothing, nothing,
-            Dict{UUID, SettlementRequest{T}}(),
-            Dict{UUID, Atomic{SettlementStatus}}(),
+            nothing,
+            nothing,
+            nothing,
+            nothing,
+            nothing,
+            Dict{UUID,SettlementRequest{T}}(),
+            Dict{UUID,Atomic{SettlementStatus}}(),
             Atomic{Bool}(false),
-            SpinLock()
+            SpinLock(),
         )
     end
 end
@@ -86,7 +90,7 @@ function initialize!(orch::Orchestrator, cfmm_bridge, phantom_auction, state_man
 end
 
 # Process settlement request through complete lifecycle
-function process_settlement!(orch::Orchestrator{T}, request::SettlementRequest{T}) where T
+function process_settlement!(orch::Orchestrator{T}, request::SettlementRequest{T}) where {T}
     # Validate request parameters
     if request.amount_in <= zero(T)
         throw(ArgumentError("Invalid amount_in: must be positive"))
@@ -94,80 +98,64 @@ function process_settlement!(orch::Orchestrator{T}, request::SettlementRequest{T
     if request.deadline < Dates.now()
         throw(ArgumentError("Request deadline already passed"))
     end
-    
+
     start_time = time_ns()
-    
+
     # Check circuit breaker
     if orch.circuit_breaker[]
-        return SettlementResult(
-            request.id, FAILED, zero(T), nothing, zero(T),
-            0.0, 0.0, 0
-        )
+        return SettlementResult(request.id, FAILED, zero(T), nothing, zero(T), 0.0, 0.0, 0)
     end
-    
+
     # Register settlement
     lock(orch.lock) do
         orch.active_settlements[request.id] = request
         orch.settlement_status[request.id] = Atomic{SettlementStatus}(PENDING)
     end
-    
+
     try
         # Phase 1: CFMM Routing
         update_status!(orch, request.id, ROUTING)
         routing_result = route_through_cfmm(orch, request)
-        
+
         if routing_result === nothing
             throw(ErrorException("CFMM routing failed"))
         end
-        
+
         baseline_price = routing_result.price
         baseline_amount = routing_result.amount_out
-        
+
         # Phase 2: Phantom Auction (if latency allows)
         improved_price = baseline_price
         improved_amount = baseline_amount
-        
+
         latency_so_far = (time_ns() - start_time) / 1_000_000
-        
+
         if latency_so_far < orch.config.fallback_threshold_ms
             update_status!(orch, request.id, AUCTIONING)
-            
-            auction_result = run_phantom_auction(
-                orch,
-                request,
-                baseline_price,
-                baseline_amount
-            )
-            
+
+            auction_result = run_phantom_auction(orch, request, baseline_price, baseline_amount)
+
             if auction_result !== nothing && auction_result.improvement_bps >= orch.config.min_improvement_bps
                 improved_price = auction_result.price
                 improved_amount = auction_result.amount
             end
         end
-        
+
         # Phase 3: Atomic Settlement
         update_status!(orch, request.id, PREPARING)
-        
-        settlement_params = prepare_settlement(
-            orch,
-            request,
-            improved_price,
-            improved_amount
-        )
-        
+
+        settlement_params = prepare_settlement(orch, request, improved_price, improved_amount)
+
         update_status!(orch, request.id, COMMITTING)
-        
-        final_result = execute_atomic_settlement(
-            orch,
-            settlement_params
-        )
-        
+
+        final_result = execute_atomic_settlement(orch, settlement_params)
+
         # Calculate metrics
         improvement_bps = calculate_improvement_bps(baseline_price, improved_price)
         execution_time_ms = (time_ns() - start_time) / 1_000_000
-        
+
         update_status!(orch, request.id, COMPLETED)
-        
+
         return SettlementResult(
             request.id,
             COMPLETED,
@@ -176,32 +164,23 @@ function process_settlement!(orch::Orchestrator{T}, request::SettlementRequest{T
             final_result.amount_out,
             improvement_bps,
             execution_time_ms,
-            final_result.gas_used
+            final_result.gas_used,
         )
-        
+
     catch e
         update_status!(orch, request.id, FAILED)
-        
+
         # Attempt fallback to direct CFMM execution
         fallback_result = execute_cfmm_fallback(orch, request)
-        
+
         if fallback_result !== nothing
             return fallback_result
         end
-        
+
         # Complete failure
         execution_time_ms = (time_ns() - start_time) / 1_000_000
-        
-        return SettlementResult(
-            request.id,
-            FAILED,
-            zero(T),
-            nothing,
-            zero(T),
-            0.0,
-            execution_time_ms,
-            0
-        )
+
+        return SettlementResult(request.id, FAILED, zero(T), nothing, zero(T), 0.0, execution_time_ms, 0)
     finally
         # Cleanup
         lock(orch.lock) do
@@ -211,16 +190,17 @@ function process_settlement!(orch::Orchestrator{T}, request::SettlementRequest{T
 end
 
 # Route through CFMM to get baseline
-function route_through_cfmm(orch::Orchestrator{T}, request::SettlementRequest{T}) where T
+function route_through_cfmm(orch::Orchestrator{T}, request::SettlementRequest{T}) where {T}
     try
         # Call CFMM bridge to get routing
         # TODO: Use proper function call once types are fixed
         if orch.cfmm_bridge !== nothing
-            return get_route(orch.cfmm_bridge,
+            return get_route(
+                orch.cfmm_bridge,
                 request.token_in,
                 request.token_out,
                 request.amount_in,
-                request.slippage_tolerance
+                request.slippage_tolerance,
             )
         end
         return nothing
@@ -231,17 +211,16 @@ function route_through_cfmm(orch::Orchestrator{T}, request::SettlementRequest{T}
 end
 
 # Run phantom auction for price improvement
-function run_phantom_auction(orch::Orchestrator{T}, request::SettlementRequest{T}, 
-                            baseline_price::T, baseline_amount::T) where T
+function run_phantom_auction(
+    orch::Orchestrator{T},
+    request::SettlementRequest{T},
+    baseline_price::T,
+    baseline_amount::T,
+) where {T}
     deadline = Dates.now() + Millisecond(orch.config.max_auction_duration_ms)
-    
+
     try
-        return orch.phantom_auction.run_auction(
-            request,
-            baseline_price,
-            baseline_amount,
-            deadline
-        )
+        return orch.phantom_auction.run_auction(request, baseline_price, baseline_amount, deadline)
     catch e
         @error "Phantom auction failed" exception=e request_id=request.id
         return nothing
@@ -249,8 +228,7 @@ function run_phantom_auction(orch::Orchestrator{T}, request::SettlementRequest{T
 end
 
 # Prepare settlement for atomic execution
-function prepare_settlement(orch::Orchestrator{T}, request::SettlementRequest{T},
-                           price::T, amount::T) where T
+function prepare_settlement(orch::Orchestrator{T}, request::SettlementRequest{T}, price::T, amount::T) where {T}
     # Create settlement parameters
     return (
         request_id = request.id,
@@ -260,7 +238,7 @@ function prepare_settlement(orch::Orchestrator{T}, request::SettlementRequest{T}
         amount_out = amount,
         price = price,
         user = request.user_address,
-        deadline = request.deadline
+        deadline = request.deadline,
     )
 end
 
@@ -274,18 +252,18 @@ function execute_atomic_settlement(orch::Orchestrator, params)
 end
 
 # Fallback to direct CFMM execution
-function execute_cfmm_fallback(orch::Orchestrator{T}, request::SettlementRequest{T}) where T
+function execute_cfmm_fallback(orch::Orchestrator{T}, request::SettlementRequest{T}) where {T}
     try
         result = orch.cfmm_bridge.execute_direct(
             request.token_in,
             request.token_out,
             request.amount_in,
-            request.slippage_tolerance
+            request.slippage_tolerance,
         )
-        
+
         if result !== nothing
             execution_time_ms = 0.0  # Would track actual time
-            
+
             return SettlementResult(
                 request.id,
                 COMPLETED,
@@ -294,14 +272,14 @@ function execute_cfmm_fallback(orch::Orchestrator{T}, request::SettlementRequest
                 result.amount_out,
                 0.0,
                 execution_time_ms,
-                result.gas_used
+                result.gas_used,
             )
         end
     catch e
         @error "CFMM fallback failed" exception=e request_id=request.id
         # Fallback failed
     end
-    
+
     return nothing
 end
 
@@ -335,7 +313,7 @@ function cancel_settlement!(orch::Orchestrator, request_id::UUID)
 end
 
 # Calculate basis points improvement
-function calculate_improvement_bps(baseline::T, improved::T) where T
+function calculate_improvement_bps(baseline::T, improved::T) where {T}
     if baseline == zero(T)
         return 0.0
     end
